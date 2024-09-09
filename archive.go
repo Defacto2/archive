@@ -372,7 +372,12 @@ func (x Extractor) Extract(targets ...string) error {
 // As some valid filenames set by MS-DOS codepages are not valid UTF-8 filenames.
 func (x Extractor) extractZip(targets ...string) error {
 	if deflate, _ := pkzip.Zip(x.Source); !deflate {
-		return x.ZipHW(targets...)
+		if err := x.ZipHW(targets...); err == nil {
+			return nil
+		}
+		// occasionally the go zip package will fail to read the file
+		// this is a fallback to the system unzip program after the
+		// hwzip (legacy archive) program has also failed.
 	}
 	if err := x.Zip(targets...); err != nil {
 		return x.Bsdtar(targets...)
