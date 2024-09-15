@@ -148,19 +148,6 @@ func (d Diagnostic) String() string {
 	return "Unknown"
 }
 
-// ExitStatus is intended to be used with the exec.Command.Run method to determine
-// the exit status of the PKZip command-line utilities.
-//
-//	err := exec.Command("unzip", "-T", "archive.zip").Run()
-//	if err != nil {
-//		diag := pkzip.ExitStatus(err)
-//		switch diag {
-//		case pkzip.Normal, pkzip.Warning:
-//			// normal or warnings are fine
-//			return nil
-//		}
-//		return fmt.Errorf("unzip test failed: %s", diag)
-//	}
 func ExitStatus(err error) Diagnostic {
 	if err == nil {
 		return Normal

@@ -28,12 +28,19 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/archive/internal"
 	"github.com/Defacto2/archive/pkzip"
 	"github.com/Defacto2/helper"
 	"github.com/Defacto2/magicnumber"
+)
+
+const (
+	TimeoutExtract = 15 * time.Second // TimeoutExtract is the maximum time allowed for the archive extraction.
+	TimeoutDefunct = 5 * time.Second  // TimeoutARC is the maximum time allowed for the defunct file extraction.
+	TimeoutLookup  = 2 * time.Second  // TimeoutLookup is the maximum time allowed for the program list content.
 )
 
 const (
@@ -71,7 +78,7 @@ func MagicExt(src string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("archive magic file lookup %w", err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, "--brief", src)
 	out, err := cmd.Output()
@@ -121,7 +128,7 @@ func (c *Content) ARJ(src string) error {
 
 	const verboselist = "v"
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, verboselist, src)
 	cmd.Stderr = &b
@@ -160,7 +167,7 @@ func (c *Content) LHA(src string) error {
 
 	const list = "-l"
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
 	cmd.Stderr = &b
@@ -215,7 +222,7 @@ func (c *Content) Rar(src string) error {
 		noComments = "-c-"
 	)
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, listBrief, "-ep", noComments, src)
 	cmd.Stderr = &b
@@ -270,7 +277,7 @@ func (c *Content) Zip(src string) error {
 	}
 	const list = "-1"
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
 	cmd.Stderr = &b
@@ -406,7 +413,7 @@ func (x Extractor) Bsdtar(targets ...string) error {
 		return ErrDest
 	}
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	const (
 		extract   = "-x"                    // -x extract files
@@ -465,7 +472,7 @@ func (x Extractor) ARC(targets ...string) error {
 	defer os.Remove(srcInDst)
 
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
 	const (
 		extract = "x" // x extract files
@@ -512,7 +519,7 @@ func (x Extractor) ARJ(targets ...string) error {
 	defer os.Remove(srcWithExt)
 
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
 	// example command: arj x archive destdir/ *
 	const (
@@ -552,7 +559,7 @@ func (x Extractor) LHA(targets ...string) error {
 		return fmt.Errorf("archive lha extract %w", err)
 	}
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
 	// example command: lha -eq2w=destdir/ archive *
 	const (
@@ -599,7 +606,7 @@ func (x Extractor) Rar(targets ...string) error {
 		return ErrDest
 	}
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	const (
 		eXtract    = "x"   // x extract files with full path
@@ -638,7 +645,7 @@ func (x Extractor) Zip(targets ...string) error {
 		return ErrDest
 	}
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	// [-options]
 	const (
@@ -690,7 +697,7 @@ func (x Extractor) Zip7(targets ...string) error {
 		return ErrDest
 	}
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	const (
 		extract   = "x"    // x extract files without paths
@@ -743,7 +750,7 @@ func (x Extractor) ZipHW(targets ...string) error {
 	defer os.Remove(srcInDst)
 
 	var b bytes.Buffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
 	const (
 		extract = "extract" // x extract files
