@@ -160,7 +160,7 @@ func ExitStatus(err error) Diagnostic {
 		return Diagnostic(unused)
 	}
 	s := strings.TrimSpace(strings.TrimPrefix(err.Error(), status))
-	code, err := strconv.Atoi(s)
+	code, err := strconv.ParseInt(s, 10, 16)
 	if err != nil {
 		return Diagnostic(unused)
 	}
