@@ -1,6 +1,7 @@
 # archive
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/Defacto2/archive.svg)](https://pkg.go.dev/github.com/Defacto2/archive)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Defacto2/server)](https://goreportcard.com/report/github.com/Defacto2/archive)
 
 Provides compressed and stored archive file extraction and content listing.
 
