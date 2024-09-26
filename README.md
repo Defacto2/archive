@@ -1,9 +1,9 @@
-# archive
+# Defacto2 / archive
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/Defacto2/archive.svg)](https://pkg.go.dev/github.com/Defacto2/archive)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Defacto2/server)](https://goreportcard.com/report/github.com/Defacto2/archive)
 
-Provides compressed and stored archive file extraction and content listing.
+The archive package provides compressed and stored archive file extraction and content listing functions. See the [reference documentation](https://pkg.go.dev/github.com/Defacto2/archive) for additional usage and examples.
 
 ## Usage
 
@@ -19,7 +19,7 @@ Use the functions.
 import "github.com/Defacto2/archive"
 
 func main() {
-Source    // Extract all files from an archive.
+    // Extract all files from an archive.
     if err := archive.Extract("path/to/archive.zip", "path/to/extract"); err != nil {
         fmt.Println(err)
     }

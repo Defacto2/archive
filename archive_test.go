@@ -1,6 +1,7 @@
 package archive_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func ExampleReadme() {
+	name := archive.Readme("APP.ZIP", "APP.EXE", "APP.TXT", "APP.BIN", "APP.DAT", "STUFF.DAT")
+	fmt.Println(name)
+	// Output: APP.TXT
+}
 
 func TestUsage(t *testing.T) {
 	t.Parallel()

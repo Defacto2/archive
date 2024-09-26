@@ -1,17 +1,25 @@
 // Package archive provides compressed and stored archive file extraction and content listing.
 //
-// The file archive formats supported are ARJ, LHA, LZH, RAR, TAR, and ZIP.
+// The file archive formats supported are 7Zip, ARC, ARJ, LHA, LZH, RAR, TAR, and ZIP,
+// including the deflate, implode, and shrink compression methods.
 //
-// The package uses the [mholt/archiver/v3] package and the following Linux programs
-// as a fallback for legacy file support.
+// The package uses following Linux terminal programs for legacy file support.
 //
-//  1. [arj] - open-source ARJ v3.10
-//  2. [lha] - Lhasa v0.4 LHA tool found in the jlha-utils or lhasa packages
-//  3. [unrar] - 6.24 freeware by Alexander Roshal, not the common [unrar-free] which is feature incomplete
-//  4. [zipinfo] - ZipInfo v3 by the Info-ZIP workgroup
+//  1. [7zz] - 7-Zip for Linux: console version
+//  2. [arc] - arc - pc archive utility
+//  2. [arj] - "Open-source ARJ" v3.10
+//  3. [lha] - Lhasa v0.4 LHA tool found in the jlha-utils or lhasa packages
+//  4. [hwzip] - hwzip for BBS era ZIP file that uses obsolete compression methods
+//  5. [tar] - GNU tar
+//  6. [unrar] - 6.24 freeware by Alexander Roshal, not the common [unrar-free] which is feature incomplete
+//  7. [zipinfo] - ZipInfo v3 by the Info-ZIP workgroup
 //
+// [7zz]: https://www.7-zip.org/
+// [arc]: https://linux.die.net/man/1/arc
 // [arj]: https://arj.sourceforge.net/
 // [lha]: https://fragglet.github.io/lhasa/
+// [hwzip]: https://www.hanshq.net/zip.html
+// [tar]: https://www.gnu.org/software/tar/
 // [unrar]: https://www.rarlab.com/rar_add.htm
 // [unrar-free]: https://gitlab.com/bgermann/unrar-free
 // [zipinfo]: https://infozip.sourceforge.net/
@@ -39,13 +47,11 @@ import (
 
 const (
 	TimeoutExtract = 15 * time.Second // TimeoutExtract is the maximum time allowed for the archive extraction.
-	TimeoutDefunct = 5 * time.Second  // TimeoutARC is the maximum time allowed for the defunct file extraction.
+	TimeoutDefunct = 5 * time.Second  // TimeoutDefunct is the maximum time allowed for the defunct file extraction.
 	TimeoutLookup  = 2 * time.Second  // TimeoutLookup is the maximum time allowed for the program list content.
 )
 
 const (
-	// permitted archives on the site:
-	// 7z,arc,ark,arj,cab,gz,lha,lzh,rar,tar,tar.gz,zip.
 	arjx = ".arj" // Archived by Robert Jung
 	lhax = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
 	lhzx = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
@@ -111,6 +117,18 @@ func MagicExt(src string) (string, error) {
 }
 
 // Content are the result of using system programs to read the file archives.
+//
+//	func ListARJ() {
+//	    var c archive.Content
+//	    err := c.ARJ("archive.arj")
+//	    if err != nil {
+//	        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+//	        return
+//	    }
+//	    for i, f := range c.Files {
+//	        fmt.Printf("%d %s\n", i+1, f)
+//	    }
+//	}
 type Content struct {
 	Ext   string   // Ext returns file extension of the archive.
 	Files []string // Files returns list of files within the archive.
@@ -243,6 +261,7 @@ func (c *Content) Rar(src string) error {
 
 // Read returns the content of the src file archive using the system archiver programs.
 // The filename is used to determine the archive format.
+//
 // Supported formats are ARJ, LHA, LZH, RAR, and ZIP.
 func (c *Content) Read(src string) error {
 	ext, err := MagicExt(src)
@@ -312,6 +331,18 @@ func ExtractAll(src, dst string) error {
 }
 
 // Extractor uses system archiver programs to extract the targets from the src file archive.
+//
+//	func Extract() {
+//	    x := archive.Extractor{
+//	        Source:      "archive.arj",
+//	        Destination: os.TempDir(),
+//	    }
+//	    err := x.Extract("README.TXT", "INFO.DOC")
+//	    if err != nil {
+//	        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+//	        return
+//	    }
+//	}
 type Extractor struct {
 	Source      string // The source archive file.
 	Destination string // The extraction destination directory.
