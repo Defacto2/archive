@@ -40,7 +40,6 @@ import (
 
 	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/archive/internal"
-	"github.com/Defacto2/archive/pkzip"
 	"github.com/Defacto2/helper"
 	"github.com/Defacto2/magicnumber"
 )
@@ -409,16 +408,12 @@ func (x Extractor) Extract(targets ...string) error {
 // based on its compression method and the original operating system used to create it.
 // As some valid filenames set by MS-DOS codepages are not valid UTF-8 filenames.
 func (x Extractor) extractZip(targets ...string) error {
-	if deflate, _ := pkzip.Zip(x.Source); !deflate {
-		if err := x.ZipHW(targets...); err == nil {
-			return nil
+	if err1 := x.Zip(targets...); err1 != nil {
+		if err2 := x.ZipHW(targets...); err2 != nil {
+			if err3 := x.Bsdtar(targets...); err3 != nil {
+				return fmt.Errorf("archive zip extract %w: %w: %w", err1, err2, err3)
+			}
 		}
-		// occasionally the go zip package will fail to read the file
-		// this is a fallback to the system unzip program after the
-		// hwzip (legacy archive) program has also failed.
-	}
-	if err := x.Zip(targets...); err != nil {
-		return x.Bsdtar(targets...)
 	}
 	return nil
 }
