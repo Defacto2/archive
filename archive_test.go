@@ -90,5 +90,4 @@ func TestUsage(t *testing.T) {
 	_, err = rezip.CompressDir("testdata", dstComp)
 	require.Error(t, err)
 	_ = os.Remove(dstComp)
-
 }

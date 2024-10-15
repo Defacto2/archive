@@ -367,8 +367,13 @@ func (x Extractor) Extract(targets ...string) error {
 	}
 	switch sign {
 	case
+		magicnumber.GzipCompressArchive:
+		if err := x.Bsdtar(targets...); err != nil {
+			return x.Gzip()
+		}
+		return nil
+	case
 		magicnumber.Bzip2CompressArchive,
-		magicnumber.GzipCompressArchive,
 		magicnumber.MicrosoftCABinet,
 		magicnumber.TapeARchive,
 		magicnumber.XZCompressArchive,
@@ -418,6 +423,44 @@ func (x Extractor) extractZip(targets ...string) error {
 	return nil
 }
 
+// Gzip decompresses the source archive file to the destination directory.
+// The source file is expected to be a gzip compressed file. Unlike the other
+// container formats, gzip only compresses a single file.
+func (x Extractor) Gzip() error {
+	src, dst := x.Source, x.Destination
+	prog, err := exec.LookPath("gzip")
+	if err != nil {
+		return fmt.Errorf("archive gzip extract %w", err)
+	}
+	if dst == "" {
+		return ErrDest
+	}
+
+	tmpFile := filepath.Join(dst, "archive.gz")
+	if _, err := helper.DuplicateOW(src, tmpFile); err != nil {
+		return fmt.Errorf("archive gzip duplicate %w", err)
+	}
+
+	var b bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
+	defer cancel()
+	const (
+		decompress = "--decompress" // -d decompress
+		restore    = "--name"       // -n restore original name and timestamp
+		overwrite  = "--force"      // -f overwrite existing files
+	)
+	args := []string{decompress, restore, overwrite, tmpFile}
+	cmd := exec.CommandContext(ctx, prog, args...)
+	cmd.Stderr = &b
+	if err = cmd.Run(); err != nil {
+		if b.String() != "" {
+			return fmt.Errorf("archive gzip %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+		}
+		return fmt.Errorf("archive gzip %w: %s", err, prog)
+	}
+	return nil
+}
+
 // Bsdtar extracts the targets from the source archive
 // to the destination directory using the [bsdtar program].
 // If the targets are empty then all files are extracted.
@@ -441,6 +484,7 @@ func (x Extractor) Bsdtar(targets ...string) error {
 	var b bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
+	// note: BSD tar uses different flags to GNU tar
 	const (
 		extract   = "-x"                    // -x extract files
 		source    = "--file"                // -f file path to extract
