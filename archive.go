@@ -579,34 +579,29 @@ func (x Extractor) ARJ(targets ...string) error {
 	if err != nil {
 		return fmt.Errorf("archive arj extract %w", err)
 	}
-
-	// arj REQUIRES a file extension for the source archive
+	// note: arj REQUIRES a file extension for the source archive
 	srcWithExt := src + arjx
-	if err := os.Symlink(src, srcWithExt); err != nil {
-		defer os.Remove(srcWithExt)
-		return fmt.Errorf("archive arj symlink %w", err)
+	if _, err := os.Stat(srcWithExt); err != nil && !os.IsNotExist(err) {
+		if err := os.Symlink(src, srcWithExt); err != nil {
+			defer os.Remove(srcWithExt)
+			return fmt.Errorf("archive arj symlink %w", err)
+		}
 	}
-	defer os.Remove(srcWithExt)
-
 	var b bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
-	// example command: arj x archive destdir/ *
+	// note: these flags are for arj32 v3.10
 	const (
 		extract   = "x"   // x extract files
-		rmPaths   = "r"   // r remove paths
 		yes       = "-y"  // -y assume yes to all queries
-		noProg    = "-i"  // -i do not display progress
-		excBase   = "-e1" // -e exclude base directory
-		noExt     = "-hx" // -hx default extension
 		targetDir = "-ht" // -ht target directory
-		dosCompat = "-2d" // -2d DOS compatibility mode
 	)
-	args := []string{extract, srcWithExt}
+	args := []string{extract, yes, srcWithExt}
 	args = append(args, targets...)
 	args = append(args, targetDir+dst)
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Stderr = &b
+	defer os.Remove(srcWithExt)
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
 			return fmt.Errorf("archive arj %w: %s: %q",
