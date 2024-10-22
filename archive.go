@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -142,12 +143,19 @@ func (c *Content) ARJ(src string) error {
 	if err != nil {
 		return fmt.Errorf("archive arj reader %w", err)
 	}
-
+	// note: arj REQUIRES a file extension for the source archive
+	srcWithExt := src + arjx
+	if _, err := os.Stat(srcWithExt); errors.Is(err, fs.ErrNotExist) {
+		if err := os.Symlink(src, srcWithExt); err != nil {
+			defer os.Remove(srcWithExt)
+			return fmt.Errorf("archive arj symlink %w", err)
+		}
+	}
 	const verboselist = "v"
 	var b bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, prog, verboselist, src)
+	cmd := exec.CommandContext(ctx, prog, verboselist, srcWithExt)
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
@@ -581,7 +589,7 @@ func (x Extractor) ARJ(targets ...string) error {
 	}
 	// note: arj REQUIRES a file extension for the source archive
 	srcWithExt := src + arjx
-	if _, err := os.Stat(srcWithExt); err != nil && !os.IsNotExist(err) {
+	if _, err := os.Stat(srcWithExt); errors.Is(err, fs.ErrNotExist) {
 		if err := os.Symlink(src, srcWithExt); err != nil {
 			defer os.Remove(srcWithExt)
 			return fmt.Errorf("archive arj symlink %w", err)
