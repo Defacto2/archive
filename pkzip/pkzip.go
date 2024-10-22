@@ -19,6 +19,8 @@ import (
 	"strings"
 )
 
+var ErrPassParse = fmt.Errorf("zip archive uses a passparse")
+
 // Compression is the PKZip compression method used by a ZIP archive file.
 type Compression uint16
 
@@ -177,6 +179,9 @@ func Methods(name string) ([]Compression, error) {
 	methods := []Compression{}
 	for _, file := range r.File {
 		fh := file.FileHeader
+		if encrypted := fh.Flags&0x1 != 0; encrypted {
+			return nil, ErrPassParse
+		}
 		methods = append(methods, Compression(fh.Method))
 	}
 	slices.Sort(methods)

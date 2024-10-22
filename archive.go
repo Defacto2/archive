@@ -41,6 +41,7 @@ import (
 
 	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/archive/internal"
+	"github.com/Defacto2/archive/pkzip"
 	"github.com/Defacto2/helper"
 	"github.com/Defacto2/magicnumber"
 )
@@ -420,7 +421,12 @@ func (x Extractor) Extract(targets ...string) error {
 // ExtractZip delegates the extraction of the source archive to the correct program
 // based on its compression method and the original operating system used to create it.
 // As some valid filenames set by MS-DOS codepages are not valid UTF-8 filenames.
+//
+// If the ZIP file uses a passphrase an error is returned.
 func (x Extractor) extractZip(targets ...string) error {
+	if _, err := pkzip.Methods(x.Source); errors.Is(err, pkzip.ErrPassParse) {
+		return fmt.Errorf("archive zip extract %w", err)
+	}
 	if err1 := x.Zip(targets...); err1 != nil {
 		if err2 := x.ZipHW(targets...); err2 != nil {
 			if err3 := x.Bsdtar(targets...); err3 != nil {
