@@ -53,6 +53,7 @@ const (
 )
 
 const (
+	arcx = ".arc" // ARC by System Enhancement Associates
 	arjx = ".arj" // Archived by Robert Jung
 	lhax = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
 	lhzx = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
@@ -97,6 +98,7 @@ func MagicExt(src string) (string, error) {
 	}
 	magics := map[string]string{
 		"7-zip archive data":    ".7z",
+		"arc archive data":      ".arc",
 		"arj archive data":      arjx,
 		"bzip2 compressed data": ".tar.bz2",
 		"gzip compressed data":  ".tar.gz",
@@ -145,11 +147,14 @@ func (c *Content) ARJ(src string) error {
 		return fmt.Errorf("archive arj reader %w", err)
 	}
 	// note: arj REQUIRES a file extension for the source archive
-	srcWithExt := src + arjx
-	if _, err := os.Stat(srcWithExt); errors.Is(err, fs.ErrNotExist) {
-		if err := os.Symlink(src, srcWithExt); err != nil {
+	srcWithExt := src
+	if !strings.EqualFold(filepath.Ext(src), arjx) {
+		srcWithExt := src + arjx
+		if _, err := os.Stat(srcWithExt); errors.Is(err, fs.ErrNotExist) {
+			if err := os.Symlink(src, srcWithExt); err != nil {
+				return fmt.Errorf("archive arj symlink %w", err)
+			}
 			defer os.Remove(srcWithExt)
-			return fmt.Errorf("archive arj symlink %w", err)
 		}
 	}
 	const verboselist = "v"
@@ -184,6 +189,14 @@ func (c *Content) ARJ(src string) error {
 // LHA returns the content of the src LHA or LZH archive,
 // credited to Haruyasu Yoshizaki (Yoshi), using the [lha program].
 //
+// The lha program on Linux does not return error codes with unsupported archive formats,
+// instead a string with no results is returned.
+//
+//	out:  PERMSSN    UID  GID      SIZE  RATIO     STAMP           NAME
+//	---------- ----------- ------- ------ ------------ --------------------
+//	---------- ----------- ------- ------ ------------ --------------------
+//	 Total         0 files       0 ****** Feb 14 13:44
+//
 // [lha program]: https://fragglet.github.io/lhasa/
 func (c *Content) LHA(src string) error {
 	prog, err := exec.LookPath(command.Lha)
@@ -201,9 +214,10 @@ func (c *Content) LHA(src string) error {
 	if err != nil {
 		return fmt.Errorf("archive lha output %w", err)
 	}
-	if len(out) == 0 {
+	if LHAEmpty(out) {
 		return ErrRead
 	}
+
 	outs := strings.Split(string(out), "\n")
 
 	// LHA list command outputs with a MSDOS era, fixed-width layout table
@@ -232,6 +246,15 @@ func (c *Content) LHA(src string) error {
 	})
 	c.Ext = lhax
 	return nil
+}
+
+// LHAEmpty returns true if the output from an LHA or LZH list shows an empty or unsupported archive.
+func LHAEmpty(output []byte) bool {
+	if len(output) == 0 {
+		return true
+	}
+	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
+	return bytes.Contains(p, []byte("Total 0 files 0"))
 }
 
 // Rar returns the content of the src RAR archive, credited to Alexander Roshal,
@@ -276,11 +299,9 @@ func (c *Content) Read(src string) error {
 	if err != nil {
 		return fmt.Errorf("read %w", err)
 	}
-	// if !strings.EqualFold(ext, filepath.Ext(filename)) {
-	// 	// retry using correct filename extension
-	// 	return fmt.Errorf("system reader: %w", ErrWrongExt)
-	// }
 	switch strings.ToLower(ext) {
+	// case arcx:
+	// 	return c.ARC(src)
 	case arjx:
 		return c.ARJ(src)
 	case lhax, lhzx:
@@ -375,8 +396,7 @@ func (x Extractor) Extract(targets ...string) error {
 		return fmt.Errorf("extractor extract magic %w", err)
 	}
 	switch sign {
-	case
-		magicnumber.GzipCompressArchive:
+	case magicnumber.GzipCompressArchive:
 		if err := x.Bsdtar(targets...); err != nil {
 			return x.Gzip()
 		}
@@ -526,52 +546,83 @@ func (x Extractor) Bsdtar(targets ...string) error {
 	return nil
 }
 
+// ZipHW extracts the targets from the source zip archive
+// to the destination directory using the [hwzip program].
+// If the targets are empty then all files are extracted.
+//
+// [hwzip program]: https://www.hanshq.net/zip2.html
+func (x Extractor) ZipHW(targets ...string) error {
+	return x.Generic(Run{
+		Program: command.HWZip,
+		Extract: "extract",
+	}, targets...)
+}
+
 // ARC extracts the targets from the source ARC archive
 // to the destination directory using the [arc program].
 // If the targets are empty then all files are extracted.
 //
-// ARC is a DOS era archive format that is not widely supported.
-// It also does not support extracting to a target directory.
-// To work around this, this copies the source archive
-// to the destination directory, uses that as the working directory
-// and extracts the files. The copied source archive is then removed.
-//
 // [arc program]: https://arj.sourceforge.net/
 func (x Extractor) ARC(targets ...string) error {
+	return x.Generic(Run{
+		Program: command.Arc,
+		Extract: "x",
+	}, targets...)
+}
+
+// Run is a struct that holds the program and extract command
+// for use with the generic extractor.
+type Run struct {
+	Program string // Program is the archiver program to run, but not the full path.
+	Extract string // Extract is the program command to extract files from the archive.
+}
+
+// Generic extracts the targets from the source archive
+// to the destination directory using the specified archive program.
+// If the targets are empty then all files are extracted.
+//
+// It is used for archive formats that are not widely supported
+// or have a limited feature set including ARC, HWZIP, and others.
+//
+// These DOS era archive formats are not widely supported.
+// They also does not support extracting to a target directory.
+// To work around this, Generic copies the source archive
+// to the destination directory, uses that as the working directory
+// and extracts the files. The copied source archive is then removed.
+func (x Extractor) Generic(run Run, targets ...string) error {
+	s := run.Program
 	src, dst := x.Source, x.Destination
 	if st, err := os.Stat(dst); err != nil {
 		return fmt.Errorf("%w: %s", err, dst)
 	} else if !st.IsDir() {
 		return fmt.Errorf("%w: %s", ErrPath, dst)
 	}
-	prog, err := exec.LookPath(command.Arc)
+
+	prog, err := exec.LookPath(run.Program)
 	if err != nil {
-		return fmt.Errorf("archive arc extract %w", err)
+		return fmt.Errorf("archive %s extract %w", s, err)
 	}
 
 	srcInDst := filepath.Join(dst, filepath.Base(src))
 	if _, err := helper.Duplicate(src, srcInDst); err != nil {
-		return fmt.Errorf("archive arc duplicate %w", err)
+		return fmt.Errorf("archive %s duplicate %w", s, err)
 	}
 	defer os.Remove(srcInDst)
 
 	var b bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
-	const (
-		extract = "x" // x extract files
-	)
-	args := []string{extract, filepath.Base(src)}
+	args := []string{run.Extract, filepath.Base(src)}
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Dir = dst
 	cmd.Stderr = &b
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("archive arc %w: %s: %q",
+			return fmt.Errorf("archive %s %w: %s: %q", s,
 				ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("archive arc %w: %s", err, prog)
+		return fmt.Errorf("archive %s %w: %s", s, err, prog)
 	}
 	return nil
 }
@@ -794,57 +845,6 @@ func (x Extractor) Zip7(targets ...string) error {
 			return fmt.Errorf("archive 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
 		}
 		return fmt.Errorf("archive 7z %w: %s", err, prog)
-	}
-	return nil
-}
-
-// ZipHW extracts the targets from the source zip archive
-// to the destination directory using the [hwzip program].
-// If the targets are empty then all files are extracted.
-//
-// hwzip is used to handle DOS era, zip archive compression methods
-// that are not widely supported.
-// It also does not support extracting to a target directory.
-// To work around this, this copies the source archive
-// to the destination directory, uses that as the working directory
-// and extracts the files. The copied source archive is then removed.
-//
-// [arc program]: https://arj.sourceforge.net/
-func (x Extractor) ZipHW(targets ...string) error {
-	src, dst := x.Source, x.Destination
-	if st, err := os.Stat(dst); err != nil {
-		return fmt.Errorf("%w: %s", err, dst)
-	} else if !st.IsDir() {
-		return fmt.Errorf("%w: %s", ErrPath, dst)
-	}
-	prog, err := exec.LookPath(command.HWZip)
-	if err != nil {
-		return fmt.Errorf("archive hwzip extract %w", err)
-	}
-
-	srcInDst := filepath.Join(dst, filepath.Base(src))
-	if _, err := helper.Duplicate(src, srcInDst); err != nil {
-		return fmt.Errorf("archive hwzip duplicate %w", err)
-	}
-	defer os.Remove(srcInDst)
-
-	var b bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
-	defer cancel()
-	const (
-		extract = "extract" // x extract files
-	)
-	args := []string{extract, filepath.Base(src)}
-	args = append(args, targets...)
-	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Dir = dst
-	cmd.Stderr = &b
-	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
-			return fmt.Errorf("archive arc %w: %s: %q",
-				ErrProg, prog, strings.TrimSpace(b.String()))
-		}
-		return fmt.Errorf("archive arc %w: %s", err, prog)
 	}
 	return nil
 }
