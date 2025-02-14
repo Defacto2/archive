@@ -54,7 +54,7 @@ func Tests() []TestData {
 			cmdDos: "bsdtar", cmdName: "bsdtar", cmdVersion: "3.7.4"},
 		{WantErr: false,
 			Testname: "Gzip", // TODO: Read() implementation
-			Filename: "GZIP125.GZ", Ext: ".gz",
+			Filename: "GZIP113.GZ", Ext: ".gz",
 			cmdDos: "gzip", cmdName: "Free Software Foundation, 2023", cmdVersion: "1.13"},
 		{WantErr: false,
 			Testname: "LHA/LZH",
@@ -114,6 +114,7 @@ func TestContent_Read(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, want, len(got.Files))
+				//fmt.Fprintln(os.Stderr, got)
 			}
 		})
 	}
@@ -161,6 +162,36 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 				n, err := helper.Count(tmp)
 				require.NoError(t, err)
 				assert.Equal(t, want, n)
+			}
+		})
+	}
+}
+
+func TestContent_ARC(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		filename string
+		want     int
+		wantExt  string
+		wantErr  bool
+	}{
+		{"Arc", "ARC601.ARC", 3, ".arc", false},
+		{"Arj", "ARJ020B.ARJ", 0, "", true},
+		{"Impode", "HWIMPODE.ZIP", 0, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := archive.Content{}
+			src := filepath.Join("testdata", tt.filename)
+			err := got.ARC(src)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, len(got.Files))
+				assert.Equal(t, tt.wantExt, got.Ext)
 			}
 		})
 	}

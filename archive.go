@@ -53,12 +53,14 @@ const (
 )
 
 const (
-	arcx = ".arc" // ARC by System Enhancement Associates
-	arjx = ".arj" // Archived by Robert Jung
-	lhax = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
-	lhzx = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
-	rarx = ".rar" // Roshal ARchive by Alexander Roshal
-	zipx = ".zip" // Phil Katz's ZIP for MS-DOS systems
+	zip7x = ".7z"  // 7-Zip by Igor Pavlov
+	arcx  = ".arc" // ARC by System Enhancement Associates
+	arjx  = ".arj" // Archived by Robert Jung
+	lhax  = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
+	lhzx  = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
+	rarx  = ".rar" // Roshal ARchive by Alexander Roshal
+	tarx  = ".tar" // Tape ARchive by AT&T Bell Labs
+	zipx  = ".zip" // Phil Katz's ZIP for MS-DOS systems
 )
 
 var (
@@ -76,9 +78,8 @@ var (
 
 // MagicExt uses the Linux [file] program to determine the src archive file type.
 // The returned string will be a file separator and extension.
-// For example a file with the magic string "gzip compressed data" will return ".tar.gz".
 //
-// Note both bzip2 and gzip archives return the .tar extension prefix.
+// Note both bzip2 and gzip archives now do not return the .tar extension prefix.
 //
 // [file]: https://www.darwinsys.com/file/
 func MagicExt(src string) (string, error) {
@@ -97,13 +98,13 @@ func MagicExt(src string) (string, error) {
 		return "", fmt.Errorf("archive magic file type: %w", ErrRead)
 	}
 	magics := map[string]string{
-		"7-zip archive data":    ".7z",
-		"arc archive data":      ".arc",
+		"7-zip archive data":    zip7x,
+		"arc archive data":      arcx,
 		"arj archive data":      arjx,
-		"bzip2 compressed data": ".tar.bz2",
-		"gzip compressed data":  ".tar.gz",
-		"rar archive data":      ".rar",
-		"posix tar archive":     ".tar",
+		"bzip2 compressed data": ".bz2",
+		"gzip compressed data":  ".gz",
+		"rar archive data":      rarx,
+		"posix tar archive":     tarx,
 		"zip archive data":      zipx,
 	}
 	s := strings.Split(strings.ToLower(string(out)), ",")
@@ -137,6 +138,34 @@ type Content struct {
 	Files []string // Files returns list of files within the archive.
 }
 
+// Read returns the content of the src file archive using the system archiver programs.
+// The filename is used to determine the archive format.
+//
+// Supported formats are ARC, ARJ, LHA, LZH, RAR, and ZIP.
+func (c *Content) Read(src string) error {
+	ext, err := MagicExt(src)
+	if err != nil {
+		return fmt.Errorf("read %w", err)
+	}
+	switch strings.ToLower(ext) {
+	case zip7x:
+		return c.Zip7(src)
+	case arcx:
+		return c.ARC(src)
+	case arjx:
+		return c.ARJ(src)
+	case lhax, lhzx:
+		return c.LHA(src)
+	case rarx:
+		return c.Rar(src)
+	case tarx:
+		return c.Tar(src)
+	case zipx:
+		return c.Zip(src)
+	}
+	return fmt.Errorf("read %w", ErrRead)
+}
+
 // ARJ returns the content of the src ARJ archive,
 // credited to Robert Jung, using the [arj program].
 //
@@ -149,15 +178,19 @@ func (c *Content) ARJ(src string) error {
 	// note: arj REQUIRES a file extension for the source archive
 	srcWithExt := src
 	if !strings.EqualFold(filepath.Ext(src), arjx) {
-		srcWithExt := src + arjx
+		srcWithExt = src + arjx
 		if _, err := os.Stat(srcWithExt); errors.Is(err, fs.ErrNotExist) {
-			if err := os.Symlink(src, srcWithExt); err != nil {
+			newname, err := filepath.Abs(srcWithExt)
+			if err != nil {
+				return fmt.Errorf("archive arj symlink abs %w", err)
+			}
+			if err := os.Link(src, newname); err != nil {
 				return fmt.Errorf("archive arj symlink %w", err)
 			}
-			defer os.Remove(srcWithExt)
+			defer os.Remove(newname)
 		}
 	}
-	const verboselist = "v"
+	const verboselist = "l"
 	var b bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
@@ -167,23 +200,54 @@ func (c *Content) ARJ(src string) error {
 	if err != nil {
 		return fmt.Errorf("archive arj output %w", err)
 	}
-	if len(out) == 0 {
+	if ARJEmpty(out) {
 		return ErrRead
 	}
-	outs := strings.Split(string(out), "\n")
+	c.Ext = arjx
+	c.Files = arjfiles(out)
+	return nil
+}
+
+func arjfiles(out []byte) []string {
+
+	// Filename       Original Compressed Ratio DateTime modified Attributes/GUA BPMGS
+	// ------------ ---------- ---------- ----- ----------------- -------------- -----
+	// TESTDAT1.TXT       2009        889 0.443 25-02-14 13:21:10                  1
+	// TESTDAT2.TXT        469        266 0.567 25-02-14 13:17:34                  1
+	// TESTDAT3.TXT      81410      22438 0.276 25-02-14 13:21:02                  1
+	// ------------ ---------- ---------- -----
+	//      3 files      83888      23593 0.281
+
+	skip1 := []byte("Filename       Original")
+	skip2 := []byte("------------ ----------")
 	files := []string{}
-	const start = len("001) ")
-	for _, s := range outs {
-		if !internal.ARJItem(s) {
+	skipped := 0
+	for line := range bytes.Lines(out) {
+		if bytes.HasPrefix(line, skip1) {
+			skipped++
 			continue
 		}
-		files = append(files, s[start:])
+		if bytes.HasPrefix(line, skip2) {
+			skipped++
+			continue
+		}
+		if skipped == 0 {
+			continue
+		}
+		if skipped > 2 {
+			return files
+		}
+		file := string(line[0:12])
+		files = append(files, file)
 	}
-	c.Files = slices.DeleteFunc(files, func(s string) bool {
-		return strings.TrimSpace(s) == ""
-	})
-	c.Ext = arjx
-	return nil
+	return files
+}
+
+func ARJEmpty(output []byte) bool {
+	if len(output) == 0 {
+		return true
+	}
+	return bytes.Contains(output, []byte("is not an ARJ archive"))
 }
 
 // LHA returns the content of the src LHA or LZH archive,
@@ -290,28 +354,132 @@ func (c *Content) Rar(src string) error {
 	return nil
 }
 
-// Read returns the content of the src file archive using the system archiver programs.
-// The filename is used to determine the archive format.
-//
-// Supported formats are ARJ, LHA, LZH, RAR, and ZIP.
-func (c *Content) Read(src string) error {
-	ext, err := MagicExt(src)
+func (c *Content) Zip7(src string) error {
+	prog, err := exec.LookPath(command.Zip7)
 	if err != nil {
-		return fmt.Errorf("read %w", err)
+		return fmt.Errorf("archive 7zip reader %w", err)
 	}
-	switch strings.ToLower(ext) {
-	// case arcx:
-	// 	return c.ARC(src)
-	case arjx:
-		return c.ARJ(src)
-	case lhax, lhzx:
-		return c.LHA(src)
-	case rarx:
-		return c.Rar(src)
-	case zipx:
-		return c.Zip(src)
+	const list = "l"
+	var b bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, prog, list, src)
+	cmd.Stderr = &b
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("archive 7zip output %w", err)
 	}
-	return fmt.Errorf("read %w", ErrRead)
+	if ARCEmpty(out) {
+		return ErrRead
+	}
+	c.Files = zip7files(out)
+	c.Ext = zip7x
+	return nil
+}
+
+func zip7files(out []byte) []string {
+
+	//    Date      Time    Attr         Size   Compressed  Name
+	// ------------------- ----- ------------ ------------  ------------------------
+	// 2025-02-15 00:21:10 ....A         2009        20465  TESTDAT1.TXT
+	// 2025-02-15 00:17:34 ....A          469               TESTDAT2.TXT
+	// 2025-02-15 00:21:02 ....A        81410               TESTDAT3.TXT
+	// ------------------- ----- ------------ ------------  ------------------------
+	// 2025-02-15 00:21:10              83888        20465  3 files
+
+	skip1 := []byte("   Date      Time  ")
+	skip2 := []byte("-------------------")
+	const padd = len("------------------- ----- ------------ ------------  ")
+	files := []string{}
+	skipped := 0
+	for line := range bytes.Lines(out) {
+		if bytes.HasPrefix(line, skip1) {
+			skipped++
+			continue
+		}
+		if bytes.HasPrefix(line, skip2) {
+			skipped++
+			continue
+		}
+		if skipped == 0 {
+			continue
+		}
+		if skipped > 2 {
+			return files
+		}
+		if len(line) < padd {
+			continue
+		}
+		file := string(line[padd:])
+		files = append(files, strings.TrimSpace(file))
+	}
+	return files
+}
+
+// ARC returns the content of the src ARC archive, once credited to System Enhancement Associates,
+// but now using the [arc port] by Howard Chu.
+//
+// [arc program]: https://github.com/hyc/arc
+func (c *Content) ARC(src string) error {
+	prog, err := exec.LookPath(command.Arc)
+	if err != nil {
+		return fmt.Errorf("archive arc reader %w", err)
+	}
+	const list = "l"
+	var b bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, prog, list, src)
+	cmd.Stderr = &b
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("archive arc output %w", err)
+	}
+	if ARCEmpty(out) {
+		return ErrRead
+	}
+	c.Files = arcfiles(out)
+	c.Ext = arcx
+	return nil
+}
+
+func arcfiles(out []byte) []string {
+
+	// Name          Length    Date
+	// ============  ========  =========
+	// TESTDAT1.TXT      2009  14 Feb 25
+	// TESTDAT2.TXT       469  14 Feb 25
+	// TESTDAT3.TXT     81410  14 Feb 25
+	// 		====  ========
+	// Total      3     83888
+
+	skip1 := []byte("Name          Length    Date")
+	skip2 := []byte("============  ========  =========")
+	end := []byte("====  ========")
+	files := []string{}
+	for line := range bytes.Lines(out) {
+		if bytes.HasPrefix(line, skip1) {
+			continue
+		}
+		if bytes.HasPrefix(line, skip2) {
+			continue
+		}
+		if bytes.HasPrefix(bytes.TrimSpace(line), end) {
+			return files
+		}
+		file := string(line[0:12])
+		files = append(files, file)
+	}
+	return files
+}
+
+// ARCEmpty returns true if the output from an ARC list shows an empty or unsupported archive.
+func ARCEmpty(output []byte) bool {
+	if len(output) == 0 {
+		return true
+	}
+	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
+	return bytes.Contains(p, []byte("has a bad header"))
 }
 
 // Zip returns the content of the src ZIP archive, credited to Phil Katz,
@@ -562,7 +730,7 @@ func (x Extractor) ZipHW(targets ...string) error {
 // to the destination directory using the [arc program].
 // If the targets are empty then all files are extracted.
 //
-// [arc program]: https://arj.sourceforge.net/
+// [arc program]: https://github.com/hyc/arc
 func (x Extractor) ARC(targets ...string) error {
 	return x.Generic(Run{
 		Program: command.Arc,
