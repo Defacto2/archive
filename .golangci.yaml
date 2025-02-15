@@ -23,6 +23,7 @@ linters:
     - nlreturn          # fussy over whitespace.
     - varnamelen        # fussy over variable names.
     # temporary disabled
+    - paralleltest      # conflicts with some tests.
 
 linters-settings:
   misspell:

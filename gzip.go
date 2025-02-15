@@ -41,22 +41,21 @@ func (c *Content) Gzip(src string) error {
 	}
 	base := strings.ToLower(filepath.Base(src))
 	switch {
-	case
-		strings.HasSuffix(base, tgzx), //tar.gz case must be before .gz
+	case // tar.gz case must be before the .gz case.
+		strings.HasSuffix(base, tgzx),
 		strings.HasSuffix(base, ".tar.gz"):
 		return c.readTarball(src)
-	case
-		strings.HasSuffix(base, gzipx):
-		return c.readName(base)
+	case strings.HasSuffix(base, gzipx):
+		c.readname(base)
+		return nil
 	}
 	return nil
 }
 
-// readName appends the uncompressed filename to the Content struct.
-func (c *Content) readName(src string) error {
+// readname appends the uncompressed filename to the Content struct.
+func (c *Content) readname(src string) {
 	c.Files = append(c.Files, GzipName(src))
 	c.Ext = gzipx
-	return nil
 }
 
 // GzipName returns the uncompressed base filename of the gzip archive.
@@ -121,7 +120,7 @@ func (x Extractor) Gzip(targets ...string) error {
 		return err
 	}
 	if m.magic == tgzx {
-		xtb, err := extractTarball(m.name)
+		xtb, err := opentarball(m.name)
 		if err != nil {
 			return err
 		}
@@ -130,24 +129,39 @@ func (x Extractor) Gzip(targets ...string) error {
 	return nil
 }
 
+// opentarball extracts the tarball archive from the gzip compressed file.
+func opentarball(name string) (Extractor, error) {
+	empty := Extractor{Source: "", Destination: ""}
+	dir := filepath.Dir(name)
+	tarball := filepath.Join(dir, GzipName(name))
+	_, err := os.Stat(tarball)
+	if err != nil {
+		return empty, fmt.Errorf("extract tarball %w", err)
+	}
+	if magic, _ := MagicExt(tarball); magic != tarx {
+		return empty, nil
+	}
+	return Extractor{Source: tarball, Destination: dir}, nil
+}
+
+type method struct {
+	magic string
+	name  string
+}
+
 func (x Extractor) tarball(targets ...string) error {
 	m, err := x.gzip()
 	if err != nil {
 		return err
 	}
 	if m.magic == tgzx {
-		xtb, err := extractTarball(m.name)
+		xtb, err := opentarball(m.name)
 		if err != nil {
 			return err
 		}
 		return xtb.Tar(targets...)
 	}
 	return nil
-}
-
-type method struct {
-	magic string
-	name  string
 }
 
 func (x Extractor) gzip() (method, error) {
@@ -189,18 +203,4 @@ func (x Extractor) gzip() (method, error) {
 		return method{}, fmt.Errorf("extract gzip %w: %s", err, prog)
 	}
 	return method{magic, name}, nil
-}
-
-// extractTarball extracts the tarball archive from the gzip compressed file.
-func extractTarball(name string) (Extractor, error) {
-	dir := filepath.Dir(name)
-	tarball := filepath.Join(dir, GzipName(name))
-	_, err := os.Stat(tarball)
-	if err != nil {
-		return Extractor{}, fmt.Errorf("extract tarball %w", err)
-	}
-	if magic, _ := MagicExt(tarball); magic != tarx {
-		return Extractor{}, nil
-	}
-	return Extractor{Source: tarball, Destination: dir}, nil
 }

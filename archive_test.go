@@ -135,11 +135,9 @@ func TestMagicExt(t *testing.T) {
 }
 
 func TestContent_Read(t *testing.T) {
-	//t.Parallel()
 	for _, tt := range Tests() {
 		const want = 3
 		t.Run(tt.Testname, func(t *testing.T) {
-			//t.Parallel()
 			got := archive.Content{Ext: "", Files: []string{}}
 			src := filepath.Join("testdata", tt.Filename)
 			err := got.Read(src)
@@ -177,10 +175,9 @@ func TestExtractor_Extract(t *testing.T) {
 			require.NoError(t, err)
 			n, err := helper.Count(tmp)
 			require.NoError(t, err)
-			switch tt.Ext {
-			case gzx:
+			if tt.Ext == gzx {
 				assert.Equal(t, 1, n)
-				lookupGzipExtracted(tmp, t)
+				lookupGzipExtracted(t, tmp)
 				return
 			}
 			assert.Equal(t, want, n)
@@ -188,7 +185,8 @@ func TestExtractor_Extract(t *testing.T) {
 	}
 }
 
-func lookupGzipExtracted(tmp string, t *testing.T) {
+func lookupGzipExtracted(t *testing.T, tmp string) {
+	t.Helper()
 	items, err := os.ReadDir(tmp)
 	require.NoError(t, err)
 	assert.Len(t, items, 1)
@@ -262,10 +260,8 @@ func TestExtractor_Zips(t *testing.T) {
 }
 
 func TestExtractSource(t *testing.T) {
-	//t.Parallel()
 	for _, tt := range Tests() {
 		t.Run(tt.Testname, func(t *testing.T) {
-			//t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
 			got, err := archive.ExtractSource(src, "tester")
 			if tt.WantErr && tt.Ext != ".txt" {

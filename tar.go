@@ -91,6 +91,7 @@ func (x Extractor) Tar(targets ...string) error {
 	return nil
 }
 
+// TempTar functions like Tar but removes the source tarball after extraction.
 func (x Extractor) TempTar(targets ...string) error {
 	tarball := x.Source
 	defer os.Remove(tarball)
