@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -88,4 +89,10 @@ func (x Extractor) Tar(targets ...string) error {
 		return fmt.Errorf("archive tar %w: %s", err, prog)
 	}
 	return nil
+}
+
+func (x Extractor) TempTar(targets ...string) error {
+	tarball := x.Source
+	defer os.Remove(tarball)
+	return x.Tar(targets...)
 }

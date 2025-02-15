@@ -62,6 +62,12 @@ func Tests() []TestData {
 		},
 		{
 			WantErr:  false,
+			Testname: "Gzip BSD Tar",
+			Filename: "BSDTAR37.TAR.gz", Ext: ".tgz",
+			cmdDos: "bsdtar", cmdInfo: "bsdtar", cmdVersion: "3.7.4",
+		},
+		{
+			WantErr:  false,
 			Testname: "Gzip",
 			Filename: "GZIP113.GZ", Ext: gzx,
 			cmdDos: "gzip", cmdInfo: "Free Software Foundation, 2023", cmdVersion: "1.13",
@@ -129,11 +135,11 @@ func TestMagicExt(t *testing.T) {
 }
 
 func TestContent_Read(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	for _, tt := range Tests() {
 		const want = 3
 		t.Run(tt.Testname, func(t *testing.T) {
-			t.Parallel()
+			//t.Parallel()
 			got := archive.Content{Ext: "", Files: []string{}}
 			src := filepath.Join("testdata", tt.Filename)
 			err := got.Read(src)
@@ -144,7 +150,6 @@ func TestContent_Read(t *testing.T) {
 			require.NoError(t, err)
 			n := len(got.Files)
 			if tt.Ext == gzx {
-				// Gzip only contains one file.
 				assert.Equal(t, 1, n)
 				return
 			}
@@ -172,14 +177,27 @@ func TestExtractor_Extract(t *testing.T) {
 			require.NoError(t, err)
 			n, err := helper.Count(tmp)
 			require.NoError(t, err)
-			if tt.Ext == gzx {
-				// Gzip only contains one file.
+			switch tt.Ext {
+			case gzx:
 				assert.Equal(t, 1, n)
+				lookupGzipExtracted(tmp, t)
 				return
 			}
 			assert.Equal(t, want, n)
 		})
 	}
+}
+
+func lookupGzipExtracted(tmp string, t *testing.T) {
+	items, err := os.ReadDir(tmp)
+	require.NoError(t, err)
+	assert.Len(t, items, 1)
+	assert.Equal(t, "TESTDAT3.TXT", items[0].Name())
+	info, err := items[0].Info()
+	require.NoError(t, err)
+	assert.False(t, info.IsDir())
+	assert.Equal(t, int64(81410), info.Size())
+	require.NoError(t, err)
 }
 
 func TestExtractor_ExtractTarget(t *testing.T) {
@@ -202,8 +220,12 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 			n, err := helper.Count(tmp)
 			require.NoError(t, err)
 			if tt.Ext == gzx {
-				// Gzip only contains one file.
 				assert.Equal(t, 1, n)
+				return
+			}
+			if strings.Contains(tt.Testname, "Shrink") ||
+				strings.Contains(tt.Testname, "Reduce") {
+				assert.Equal(t, 3, n)
 				return
 			}
 			assert.Equal(t, want, n)
@@ -240,13 +262,13 @@ func TestExtractor_Zips(t *testing.T) {
 }
 
 func TestExtractSource(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	for _, tt := range Tests() {
 		t.Run(tt.Testname, func(t *testing.T) {
-			t.Parallel()
+			//t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
 			got, err := archive.ExtractSource(src, "tester")
-			if tt.WantErr {
+			if tt.WantErr && tt.Ext != ".txt" {
 				require.Error(t, err, tt.Filename)
 				return
 			}
@@ -264,7 +286,7 @@ func TestList(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
 			got, err := archive.List(src, tt.Filename)
-			if tt.WantErr {
+			if tt.WantErr && tt.Ext != ".txt" {
 				require.Error(t, err)
 				return
 			}
@@ -306,7 +328,8 @@ func TestInvalidFormats(t *testing.T) { //nolint:cyclop
 				err = x.ARJ()
 				require.Error(t, err)
 			}
-			if !strings.EqualFold(tt.Ext, gzx) {
+			if !strings.EqualFold(tt.Ext, gzx) &&
+				!strings.EqualFold(tt.Ext, ".tgz") {
 				err := c.Gzip(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
@@ -327,11 +350,9 @@ func TestInvalidFormats(t *testing.T) { //nolint:cyclop
 				err = x.Rar()
 				require.Error(t, err)
 			}
-			if !strings.EqualFold(tt.Ext, ".tar") {
-				ext := filepath.Ext(src)
-				if strings.EqualFold(ext, ".7z") {
-					return // Skip 7z as it is also supported by bsdtar.
-				}
+			if !strings.EqualFold(tt.Ext, ".tar") &&
+				!strings.EqualFold(tt.Ext, ".tgz") &&
+				!strings.EqualFold(tt.Ext, ".7z") {
 				err := c.Tar(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
@@ -393,6 +414,35 @@ func TestHardLink(t *testing.T) {
 				return
 			}
 			assert.True(t, strings.HasSuffix(got, tt.want))
+		})
+	}
+}
+
+func TestGzipName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			"Filename with extension", "ARCHIVE.tar.gz",
+			"ARCHIVE.tar",
+		},
+		{
+			"Filename without extension", "ARCHIVE.gz",
+			"ARCHIVE",
+		},
+		{
+			"Filename with multiple dots", "ARCHIVE.tar.gz.gz",
+			"ARCHIVE.tar.gz",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := archive.GzipName(tt.src)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

@@ -25,6 +25,9 @@
 // [zipinfo]: https://infozip.sourceforge.net/
 package archive
 
+// More details on Linux decompression programs:
+// https://wiki.archlinux.org/title/Archiving_and_compression
+
 import (
 	"bytes"
 	"context"
@@ -62,6 +65,7 @@ const (
 	lhzx  = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
 	rarx  = ".rar" // Roshal ARchive by Alexander Roshal
 	tarx  = ".tar" // Tape ARchive by AT&T Bell Labs
+	tgzx  = ".tgz" // Tape ARchive by AT&T Bell Labs and GNU Zip
 	zipx  = ".zip" // Phil Katz's ZIP for MS-DOS systems
 	zip7x = ".7z"  // 7-Zip by Igor Pavlov
 )
@@ -85,6 +89,8 @@ var (
 // The returned string will be a file separator and extension.
 //
 // Note both bzip2 and gzip archives now do not return the .tar extension prefix.
+// The detection of tar.gz archives requires the src filename to end with .tar.gz,
+// otherwise the file will be treated as a gzip archive.
 //
 // [file]: https://www.darwinsys.com/file/
 func MagicExt(src string) (string, error) {
@@ -103,6 +109,7 @@ func MagicExt(src string) (string, error) {
 		return "", fmt.Errorf("archive magic file type: %w", ErrRead)
 	}
 	magics := map[string]string{
+		// note these are the outputs from the `file` command
 		"arc archive data":      arcx,
 		"arj archive data":      arjx,
 		"bzip2 compressed data": ".bz2",
@@ -116,6 +123,9 @@ func MagicExt(src string) (string, error) {
 	magic := strings.TrimSpace(s[0])
 	if foundLHA(magic) {
 		return lhax, nil
+	}
+	if foundTGZ(magic, src) {
+		return tgzx, nil
 	}
 	for magic, ext := range magics {
 		if strings.TrimSpace(s[0]) == magic {
@@ -147,6 +157,15 @@ func foundLHA(magic string) bool {
 	return false
 }
 
+// foundTGZ returns true if a Tar archive with Gzip compression is matched in the src file.
+func foundTGZ(magic, src string) bool {
+	if magic != "gzip compressed data" {
+		return false
+	}
+	name := strings.ToLower(filepath.Base(src))
+	return strings.HasSuffix(name, ".tar.gz")
+}
+
 // Content are the result of using system programs to read the file archives.
 //
 //	func ListARJ() {
@@ -172,7 +191,7 @@ type Content struct {
 func (c *Content) Read(src string) error {
 	ext, err := MagicExt(src)
 	if err != nil {
-		return fmt.Errorf("read %w", err)
+		return fmt.Errorf("content read %w", err)
 	}
 	switch strings.ToLower(ext) {
 	case zip7x:
@@ -181,7 +200,7 @@ func (c *Content) Read(src string) error {
 		return c.ARC(src)
 	case arjx:
 		return c.ARJ(src)
-	case gzipx:
+	case gzipx, tgzx:
 		return c.Gzip(src)
 	case lhax, lhzx:
 		return c.LHA(src)
@@ -192,7 +211,7 @@ func (c *Content) Read(src string) error {
 	case zipx:
 		return c.Zip(src)
 	}
-	return fmt.Errorf("read %w", ErrRead)
+	return fmt.Errorf("content read %w: %q", ErrNotImplemented, ext)
 }
 
 // HardLink is used to create a hard link to the source file
@@ -277,7 +296,7 @@ func (x Extractor) Extract(targets ...string) error {
 func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) error {
 	switch sign { //nolint:exhaustive
 	case magicnumber.GzipCompressArchive:
-		return x.Gzip() // TODO: handle possible .tar container
+		return x.Gzip(targets...)
 	case
 		magicnumber.PKWAREZipReduce,
 		magicnumber.PKWAREZipShrink:
