@@ -13,8 +13,8 @@ import (
 
 // Package file arj.go contains the ARJ compression methods.
 
-// ARJ returns the content of the src ARJ archive,
-// credited to Robert Jung, using the [arj program].
+// ARJ returns the content of the src ARJ archive.
+// The format credited to Robert Jung using the [arj program].
 //
 // [arj program]: https://arj.sourceforge.net/
 func (c *Content) ARJ(src string) error {
@@ -41,7 +41,7 @@ func (c *Content) ARJ(src string) error {
 	if err != nil {
 		return fmt.Errorf("archive arj output %w", err)
 	}
-	if arjEmpty(out) {
+	if notArj(out) {
 		return ErrRead
 	}
 	c.Ext = arjx
@@ -49,13 +49,7 @@ func (c *Content) ARJ(src string) error {
 	return nil
 }
 
-func arjEmpty(output []byte) bool {
-	if len(output) == 0 {
-		return true
-	}
-	return bytes.Contains(output, []byte("is not an ARJ archive"))
-}
-
+// arjFiles parses the output of the arj list command and returns the listed filenames.
 func arjFiles(out []byte) []string {
 
 	// Filename       Original Compressed Ratio DateTime modified Attributes/GUA BPMGS
@@ -89,6 +83,14 @@ func arjFiles(out []byte) []string {
 		files = append(files, file)
 	}
 	return files
+}
+
+// notArj returns true if the output is not an ARJ archive.
+func notArj(output []byte) bool {
+	if len(output) == 0 {
+		return true
+	}
+	return bytes.Contains(output, []byte("is not an ARJ archive"))
 }
 
 // ARJ extracts the targets from the source ARJ archive

@@ -11,6 +11,9 @@ import (
 
 // Package file tar.go contains the BSD Tar compression methods.
 
+// Tar returns the content of the Tar archive using the [bsdtar program].
+//
+// [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 func (c *Content) Tar(src string) error {
 	prog, err := exec.LookPath("tar")
 	if err != nil {
@@ -37,18 +40,17 @@ func (c *Content) Tar(src string) error {
 	return nil
 }
 
-// Bsdtar extracts the targets from the source archive
-// to the destination directory using the [bsdtar program].
+// Tar extracts the content of the Tar archive using the [bsdtar program].
 // If the targets are empty then all files are extracted.
-// bsdtar uses the performant [libarchive library] for archive extraction
-// and is the recommended program for extracting the following formats:
+//
+// bsdtar uses the performant [libarchive library] for archive extraction:
 //
 // gzip, bzip2, compress, xz, lzip, lzma, tar, iso9660, zip, ar, xar,
 // lha/lzh, rar, rar v5, Microsoft Cabinet, 7-zip.
 //
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 // [libarchive library]: http://www.libarchive.org/
-func (x Extractor) Bsdtar(targets ...string) error {
+func (x Extractor) Tar(targets ...string) error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath("bsdtar")
 	if err != nil {

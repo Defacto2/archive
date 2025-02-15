@@ -13,6 +13,9 @@ import (
 
 // Package file gzip.go contains the Gzip compression methods.
 
+// Gzip returns the uncompressed filename of the [gzip] archive which is expected to be a single file.
+//
+// [gzip]: https://www.gnu.org/software/gzip/
 func (c *Content) Gzip(src string) error {
 	prog, err := exec.LookPath("gzip")
 	if err != nil {
@@ -47,7 +50,9 @@ func (c *Content) Gzip(src string) error {
 
 // Gzip decompresses the source archive file to the destination directory.
 // The source file is expected to be a gzip compressed file. Unlike the other
-// container formats, gzip only compresses a single file.
+// container formats, [gzip] only compresses a single file.
+//
+// [gzip]: https://www.gnu.org/software/gzip/
 func (x Extractor) Gzip() error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath("gzip")

@@ -12,10 +12,18 @@ import (
 
 // Package file zip7.go contains the 7-Zip compression methods.
 
+// Zip7 returns the content of the src 7-zip archive.
+// The format credited to Igor Pavlov and using the [7z program].
+//
+// On some Linux distributions the 7z program is named 7zz.
+// The legacy version of the 7z program, the p7zip package
+// should not be used!
+//
+// [7z program]: https://7-zip.org/
 func (c *Content) Zip7(src string) error {
 	prog, err := exec.LookPath(command.Zip7)
 	if err != nil {
-		return fmt.Errorf("archive 7zip reader %w", err)
+		return fmt.Errorf("content 7zip reader %w", err)
 	}
 	const list = "l"
 	var b bytes.Buffer
@@ -25,9 +33,9 @@ func (c *Content) Zip7(src string) error {
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("archive 7zip output %w", err)
+		return fmt.Errorf("content 7zip output %w", err)
 	}
-	if zip7Empty(out) {
+	if not7zip(out) {
 		return ErrRead
 	}
 	c.Files = zip7files(out)
@@ -35,6 +43,7 @@ func (c *Content) Zip7(src string) error {
 	return nil
 }
 
+// zip7files parses the output of the 7z list command and returns the listed filenames.
 func zip7files(out []byte) []string {
 
 	//    Date      Time    Attr         Size   Compressed  Name
@@ -74,10 +83,10 @@ func zip7files(out []byte) []string {
 	return files
 }
 
-// zip7Empty returns true if the output is not a 7z archive.
+// not7zip returns true if the output is not a 7z archive.
 // The 7zz application supports many archive formats but in this
 // case we are only interested in the 7z format.
-func zip7Empty(output []byte) bool {
+func not7zip(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
@@ -97,17 +106,17 @@ func (x Extractor) Zip7(targets ...string) error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Zip7)
 	if err != nil {
-		return fmt.Errorf("archive 7z extract %w", err)
+		return fmt.Errorf("extractor 7z %w", err)
 	}
 	if dst == "" {
 		return ErrDest
 	}
 
-	// because the 7zz program supports many archive formats, restrict it to 7z
+	// as the 7z program supports many archive formats, restrict it to 7z
 	if ext, err := MagicExt(src); err != nil {
-		return fmt.Errorf("archive 7z %w: %s", err, src)
+		return fmt.Errorf("extractor 7z %w: %s", err, src)
 	} else if ext != zip7x {
-		return fmt.Errorf("archive 7z %w: %s", ErrExt, src)
+		return fmt.Errorf("extractor 7z %w: %s", ErrExt, src)
 	}
 
 	var b bytes.Buffer
@@ -126,9 +135,9 @@ func (x Extractor) Zip7(targets ...string) error {
 	cmd.Stderr = &b
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("archive 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+			return fmt.Errorf("extractor 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("archive 7z %w: %s", err, prog)
+		return fmt.Errorf("extractor 7z %w: %s", err, prog)
 	}
 	return nil
 }

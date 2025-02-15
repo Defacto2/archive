@@ -244,7 +244,7 @@ func TestInvalidFormats(t *testing.T) {
 				err := c.Tar(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.Bsdtar()
+				err = x.Tar()
 				require.Error(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".zip") {

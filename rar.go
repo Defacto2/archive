@@ -13,8 +13,12 @@ import (
 
 // Package file rar.go contains the RAR compression methods.
 
-// Rar returns the content of the src RAR archive, credited to Alexander Roshal,
-// using the [unrar program].
+// Rar returns the content of the src RAR archive.
+// The format is credited to Alexander Roshal using the [unrar program].
+//
+// On Linux there are two versions of the unrar program, the freeware
+// version by Alexander Roshal and the feature incomplete [unrar-free].
+// The freeware version is the recommended program for extracting RAR archives.
 //
 // [unrar program]: https://www.rarlab.com/rar_add.htm
 func (c *Content) Rar(src string) error {

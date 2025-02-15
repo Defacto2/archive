@@ -12,8 +12,10 @@ import (
 
 // Package file lha.go contains the LHA/LZH compression methods.
 
-// LHA returns the content of the src LHA or LZH archive,
-// credited to Haruyasu Yoshizaki (Yoshi), using the [lha program].
+// LHA returns the content of the src LHA or LZH archive.
+// The format credited to Haruyasu Yoshizaki (Yoshi) using the [lha program].
+//
+// On Linux either the jlha-utils or lhasa work.
 //
 // [lha program]: https://fragglet.github.io/lhasa/
 func (c *Content) LHA(src string) error {
@@ -33,7 +35,7 @@ func (c *Content) LHA(src string) error {
 	if err != nil {
 		return fmt.Errorf("archive lha output %w", err)
 	}
-	if lhaEmpty(out) {
+	if notLHA(out) {
 		return ErrRead
 	}
 	c.Files = lhaFiles(out)
@@ -41,14 +43,7 @@ func (c *Content) LHA(src string) error {
 	return nil
 }
 
-func lhaEmpty(output []byte) bool {
-	if len(output) == 0 {
-		return true
-	}
-	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
-	return bytes.Contains(p, []byte("Total 0 files 0"))
-}
-
+// lhaFiles parses the output of the lha list command and returns the listed filenames.
 func lhaFiles(out []byte) []string {
 
 	// PERMSSN    UID  GID      SIZE  RATIO     STAMP           NAME
@@ -91,11 +86,22 @@ func lhaFiles(out []byte) []string {
 	return files
 }
 
-// LHA extracts the targets from the source LHA/LZH archive
-// to the destination directory using an lha program.
+// notLHA returns true if the output is not an LHA archive.
+func notLHA(output []byte) bool {
+	if len(output) == 0 {
+		return true
+	}
+	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
+	return bytes.Contains(p, []byte("Total 0 files 0"))
+}
+
+// LHA extracts the targets from the source LHA/LZH archive.
+// The format credited to Haruyasu Yoshizaki (Yoshi) using the [lha program].
 // If the targets are empty then all files are extracted.
 //
 // On Linux either the jlha-utils or lhasa work.
+//
+// [lha program]: https://fragglet.github.io/lhasa/
 func (x Extractor) LHA(targets ...string) error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Lha)

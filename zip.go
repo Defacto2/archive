@@ -13,8 +13,8 @@ import (
 
 // Package file zip.go contains the ZIP compression methods.
 
-// Zip returns the content of the src ZIP archive, credited to Phil Katz,
-// using the [zipinfo program].
+// Zip returns the content of the src ZIP archive.
+// The format is credited to Phil Katz using the [zipinfo program].
 //
 // [zipinfo program]: https://infozip.sourceforge.net/
 func (c *Content) Zip(src string) error {
@@ -49,8 +49,8 @@ func (c *Content) Zip(src string) error {
 	return nil
 }
 
-// Zip extracts the targets from the source Zip archive
-// to the destination directory using the [unzip program].
+// Zip extracts the content of the src ZIP archive.
+// The format is credited to Phil Katz using the [unzip program].
 // If the targets are empty then all files are extracted.
 //
 // [unzip program]: https://www.linux.org/docs/man1/unzip.html
@@ -97,10 +97,17 @@ func (x Extractor) Zip(targets ...string) error {
 	return nil
 }
 
-// ZipHW extracts the targets from the source zip archive
-// to the destination directory using the [hwzip program].
+// ZipHW extracts the content of the src ZIP archive using the [hwzip program].
+// The format is credited to Phil Katz.
 //
-// hwzip does not support extracting individual files from a zip archive.
+// Modern unzip only supports the Deflate and Store compression methods.
+//
+// hwzip supports these legacy PKZIP formats that are not supported anymore:
+//   - Shrink
+//   - Reduce
+//   - Implode
+//
+// hwzip does not support targets, the extracting of individual files from a zip archive.
 //
 // [hwzip program]: https://www.hanshq.net/zip2.html
 func (x Extractor) ZipHW() error {

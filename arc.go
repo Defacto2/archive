@@ -11,14 +11,15 @@ import (
 
 // Package file arc.go contains the ARC archive compression methods.
 
-// ARC returns the content of the src ARC archive, once credited to System Enhancement Associates,
-// but now using the [arc port] by Howard Chu.
+// ARC returns the content of the src ARC archive.
+// The format once credited to System Enhancement Associates,
+// but now using the [arc program] by Howard Chu.
 //
 // [arc program]: https://github.com/hyc/arc
 func (c *Content) ARC(src string) error {
 	prog, err := exec.LookPath(command.Arc)
 	if err != nil {
-		return fmt.Errorf("archive arc reader %w", err)
+		return fmt.Errorf("content arc %w", err)
 	}
 	const list = "l"
 	var b bytes.Buffer
@@ -28,9 +29,9 @@ func (c *Content) ARC(src string) error {
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("archive arc output %w", err)
+		return fmt.Errorf("content arc %w", err)
 	}
-	if arcEmpty(out) {
+	if notArc(out) {
 		return ErrRead
 	}
 	c.Files = arcFiles(out)
@@ -38,6 +39,7 @@ func (c *Content) ARC(src string) error {
 	return nil
 }
 
+// arcFiles parses the output of the arc list command and returns the listed filenames.
 func arcFiles(out []byte) []string {
 
 	// Name          Length    Date
@@ -68,8 +70,8 @@ func arcFiles(out []byte) []string {
 	return files
 }
 
-// arcEmpty returns true if the output from an ARC list shows an empty or unsupported archive.
-func arcEmpty(output []byte) bool {
+// notArc returns true if the output is not an ARC archive.
+func notArc(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
@@ -77,8 +79,9 @@ func arcEmpty(output []byte) bool {
 	return bytes.Contains(p, []byte("has a bad header"))
 }
 
-// ARC extracts the targets from the source ARC archive
-// to the destination directory using the [arc program].
+// ARC extracts the content of the ARC archive.
+// The format once credited to System Enhancement Associates,
+// but now using the [arc program] by Howard Chu.
 // If the targets are empty then all files are extracted.
 //
 // [arc program]: https://github.com/hyc/arc

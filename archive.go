@@ -265,7 +265,7 @@ func (x Extractor) Extract(targets ...string) error {
 		magicnumber.TapeARchive,
 		magicnumber.XZCompressArchive,
 		magicnumber.ZStandardArchive:
-		return x.Bsdtar(targets...)
+		return x.Tar(targets...)
 	case
 		magicnumber.PKWAREZip,
 		magicnumber.PKWAREZip64,
@@ -302,13 +302,13 @@ func (x Extractor) Zips(targets ...string) error {
 	}
 	if err := x.Zip(targets...); err != nil {
 		if len(targets) > 0 {
-			if err1 := x.Bsdtar(targets...); err1 != nil {
+			if err1 := x.Tar(targets...); err1 != nil {
 				return fmt.Errorf("archive zip extract all methods: %w", err)
 			}
 			return nil
 		}
 		if errhw := x.ZipHW(); errhw != nil {
-			if err3 := x.Bsdtar(); err3 != nil {
+			if err3 := x.Tar(); err3 != nil {
 				return fmt.Errorf("archive zip extract all methods: %w", err)
 			}
 		}
