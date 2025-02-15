@@ -39,7 +39,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Defacto2/archive/internal"
 	"github.com/Defacto2/archive/pkzip"
 	"github.com/Defacto2/helper"
 	"github.com/Defacto2/magicnumber"
@@ -49,6 +48,10 @@ const (
 	TimeoutExtract = 15 * time.Second // TimeoutExtract is the maximum time allowed for the archive extraction.
 	TimeoutDefunct = 5 * time.Second  // TimeoutDefunct is the maximum time allowed for the defunct file extraction.
 	TimeoutLookup  = 2 * time.Second  // TimeoutLookup is the maximum time allowed for the program list content.
+
+	// WriteWriteRead is the file mode for read and write access.
+	// The file owner and group has read and write access, and others have read access.
+	WriteWriteRead fs.FileMode = 0o664
 )
 
 const (
@@ -111,7 +114,7 @@ func MagicExt(src string) (string, error) {
 	}
 	s := strings.Split(strings.ToLower(string(out)), ",")
 	magic := strings.TrimSpace(s[0])
-	if internal.MagicLHA(magic) {
+	if foundLHA(magic) {
 		return lhax, nil
 	}
 	for magic, ext := range magics {
@@ -120,6 +123,28 @@ func MagicExt(src string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("archive magic file %w: %q", ErrExt, magic)
+}
+
+// foundLHA returns true if the LHA file type is matched in the magic string.
+func foundLHA(magic string) bool {
+	s := strings.Split(magic, " ")
+	const lha, lharc = "lha", "lharc"
+	if s[0] == lharc {
+		return true
+	}
+	if s[0] != lha {
+		return false
+	}
+	if len(s) < len(lha) {
+		return false
+	}
+	if strings.Join(s[0:3], " ") == "lha archive data" {
+		return true
+	}
+	if strings.Join(s[2:4], " ") == "archive data" {
+		return true
+	}
+	return false
 }
 
 // Content are the result of using system programs to read the file archives.
