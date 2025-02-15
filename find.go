@@ -36,12 +36,6 @@ func (f Finds) BestMatch() string {
 	return ""
 }
 
-const (
-	diz = ".diz"
-	nfo = ".nfo"
-	txt = ".txt"
-)
-
 // Readme returns the best matching scene text README or NFO file from a collection of files.
 // The filename is the name of the archive file, and the files are the list of files in the archive.
 // Note the filename matches are case-insensitive as many handled file archives are
@@ -63,6 +57,12 @@ func Readme(filename string, files ...string) string {
 	return f.BestMatch()
 }
 
+const (
+	diz = ".diz"
+	nfo = ".nfo"
+	txt = ".txt"
+)
+
 func matchs(file, name, base string, f Finds) Finds {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch {
@@ -81,10 +81,10 @@ func matchs(file, name, base string, f Finds) Finds {
 	case name == base+diz:
 		// [archive name].diz
 		f[file] = Lvl5
-	case name == txt:
+	case ext == txt:
 		// [random].txt
 		f[file] = Lvl6
-	case name == diz:
+	case ext == diz:
 		// [random].diz
 		f[file] = Lvl7
 	default:

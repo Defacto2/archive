@@ -30,10 +30,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,6 +75,7 @@ var (
 	ErrPath           = errors.New("path is a file")
 	ErrPanic          = errors.New("extract panic")
 	ErrMissing        = errors.New("path does not exist")
+	ErrTooMany        = errors.New("will not decompress this archive as it is very large")
 )
 
 // MagicExt uses the Linux [file] program to determine the src archive file type.
@@ -165,15 +168,6 @@ func (c *Content) Read(src string) error {
 		return c.Zip(src)
 	}
 	return fmt.Errorf("read %w", ErrRead)
-}
-
-// ExtractAll extracts all files from the src archive file to the destination directory.
-func ExtractAll(src, dst string) error {
-	e := Extractor{Source: src, Destination: dst}
-	if err := e.Extract(); err != nil {
-		return fmt.Errorf("extract all %w", err)
-	}
-	return nil
 }
 
 // HardLink is used to create a hard link to the source file
@@ -371,4 +365,115 @@ func (x Extractor) Generic(run Run, targets ...string) error {
 		return fmt.Errorf("archive %s %w: %s", s, err, prog)
 	}
 	return nil
+}
+
+// ExtractAll extracts all files from the src archive file to the destination directory.
+func ExtractAll(src, dst string) error {
+	e := Extractor{Source: src, Destination: dst}
+	if err := e.Extract(); err != nil {
+		return fmt.Errorf("extract all %w", err)
+	}
+	return nil
+}
+
+// ExtractSource extracts the source file into a temporary directory.
+// The named file is used as part of the extracted directory path.
+// The src is the source file to extract.
+func ExtractSource(src, name string) (string, error) {
+	const mb150 = 150 * 1024 * 1024
+	if st, err := os.Stat(src); err != nil {
+		return "", fmt.Errorf("cannot stat file: %w", err)
+	} else if st.IsDir() {
+		return "", ErrNotArchive
+	} else if st.Size() > mb150 {
+		return "", ErrTooMany
+	}
+	dst, err := helper.MkContent(src)
+	if err != nil {
+		return "", fmt.Errorf("cannot create content directory: %w", err)
+	}
+	entries, _ := os.ReadDir(dst)
+	const extracted = 2
+	if len(entries) >= extracted {
+		return dst, nil
+	}
+	switch filearchive(src) {
+	case false:
+		// copy the file
+		newpath := filepath.Join(dst, name)
+		if _, err := helper.DuplicateOW(src, newpath); err != nil {
+			defer os.RemoveAll(dst)
+			return "", fmt.Errorf("cannot duplicate file: %w", err)
+		}
+	case true:
+		// extract the archive
+		if err := ExtractAll(src, dst); err != nil {
+			defer os.RemoveAll(dst)
+			return "", fmt.Errorf("cannot read extracted archive: %w", err)
+		}
+	}
+	return dst, nil
+}
+
+// filearchive confirms if the src file is a supported archive file.
+func filearchive(src string) bool {
+	r, err := os.Open(src)
+	if err != nil {
+		return false
+	}
+	sign, err := magicnumber.Archive(r)
+	if err != nil {
+		return false
+	}
+	return sign != magicnumber.Unknown
+}
+
+// List returns the files within an 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
+// This filename extension is used to determine the archive format.
+func List(src, filename string) ([]string, error) {
+	st, err := os.Stat(src)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("archive list %w: %s", ErrMissing, filepath.Base(src))
+	}
+	if st.IsDir() {
+		return nil, fmt.Errorf("archive list %w: %s", ErrFile, filepath.Base(src))
+	}
+	path, err := ExtractSource(src, filename)
+	if err != nil {
+		return commander(src, filename)
+	}
+	var files []string
+	err = filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			rel, err := filepath.Rel(path, filePath)
+			if err != nil {
+				fmt.Fprint(io.Discard, err)
+				files = append(files, filePath)
+				return nil
+			}
+			files = append(files, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("archive list %w", err)
+	}
+	return files, nil
+}
+
+// commander uses system archiver and decompression programs to read the src archive file.
+func commander(src, filename string) ([]string, error) {
+	c := Content{}
+	if err := c.Read(src); err != nil {
+		return nil, fmt.Errorf("commander failed with %s (%q): %w", filename, c.Ext, err)
+	}
+	// remove empty entries
+	files := c.Files
+	files = slices.DeleteFunc(files, func(s string) bool {
+		return strings.TrimSpace(s) == ""
+	})
+	return files, nil
 }

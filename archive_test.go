@@ -13,12 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ExampleReadme() {
-	name := archive.Readme("APP.ZIP", "APP.EXE", "APP.TXT", "APP.BIN", "APP.DAT", "STUFF.DAT")
-	fmt.Println(name)
-	// Output: APP.TXT
-}
-
 // TestData is the metadata for the example archive files found in `/testdata`
 type TestData struct {
 	WantErr    bool   // WantErr is true if the archive is not supported.
@@ -183,6 +177,69 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 				return
 			}
 			assert.Equal(t, want, n)
+		})
+	}
+}
+
+func TestExtractor_Zips(t *testing.T) {
+	t.Parallel()
+	for _, tt := range Tests() {
+		t.Run(tt.Testname, func(t *testing.T) {
+			t.Parallel()
+			if tt.Ext != ".zip" {
+				return
+			}
+			tmp := t.TempDir()
+			err := archive.Extractor{
+				Source:      filepath.Join("testdata", tt.Filename),
+				Destination: tmp,
+			}.Zips()
+			require.NoError(t, err)
+			err = archive.Extractor{
+				Source:      filepath.Join("testdata", tt.Filename),
+				Destination: tmp,
+			}.Zips("TESTDAT2.TXT", "TESTDAT3.TXT")
+			switch tt.Testname {
+			case "Reduce ZIP":
+				require.Error(t, err)
+			default:
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestExtractSource(t *testing.T) {
+	t.Parallel()
+	for _, tt := range Tests() {
+		t.Run(tt.Testname, func(t *testing.T) {
+			t.Parallel()
+			src := filepath.Join("testdata", tt.Filename)
+			got, err := archive.ExtractSource(src, "tester")
+			if tt.WantErr {
+				require.Error(t, err, tt.Filename)
+				return
+			}
+			require.NoError(t, err)
+			_, err = os.Stat(got)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestList(t *testing.T) {
+	t.Parallel()
+	for _, tt := range Tests() {
+		t.Run(tt.Testname, func(t *testing.T) {
+			t.Parallel()
+			src := filepath.Join("testdata", tt.Filename)
+			got, err := archive.List(src, tt.Filename)
+			if tt.WantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.NotEmpty(t, got)
 		})
 	}
 }
