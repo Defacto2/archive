@@ -271,7 +271,11 @@ func (x Extractor) Extract(targets ...string) error {
 	if err != nil {
 		return fmt.Errorf("extractor extract magic %w", err)
 	}
-	switch sign {
+	return x.checkSign(sign, targets...)
+}
+
+func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) error {
+	switch sign { //nolint:exhaustive
 	case magicnumber.GzipCompressArchive:
 		return x.Gzip() // TODO: handle possible .tar container
 	case
@@ -301,6 +305,12 @@ func (x Extractor) Extract(targets ...string) error {
 		return x.Rar(targets...)
 	case magicnumber.X7zCompressArchive:
 		return x.Zip7(targets...)
+	}
+	return x.unknowns(sign)
+}
+
+func (x Extractor) unknowns(sign magicnumber.Signature) error {
+	switch sign { //nolint:exhaustive
 	case magicnumber.Unknown:
 		return fmt.Errorf("%w, %s", ErrNotArchive, sign)
 	default:
@@ -319,17 +329,19 @@ func (x Extractor) Zips(targets ...string) error {
 	if _, err := pkzip.Methods(x.Source); errors.Is(err, pkzip.ErrPassParse) {
 		return fmt.Errorf("archive zip extract %w", err)
 	}
-	if err := x.Zip(targets...); err != nil {
-		if len(targets) > 0 {
-			if err1 := x.Tar(targets...); err1 != nil {
-				return fmt.Errorf("archive zip extract all methods: %w", err)
-			}
-			return nil
+	err := x.Zip(targets...)
+	if err == nil {
+		return nil
+	}
+	if len(targets) > 0 {
+		if err1 := x.Tar(targets...); err1 != nil {
+			return fmt.Errorf("archive zip extract all methods: %w", err)
 		}
-		if errhw := x.ZipHW(); errhw != nil {
-			if err3 := x.Tar(); err3 != nil {
-				return fmt.Errorf("archive zip extract all methods: %w", err)
-			}
+		return nil
+	}
+	if errhw := x.ZipHW(); errhw != nil {
+		if err3 := x.Tar(); err3 != nil {
+			return fmt.Errorf("archive zip extract all methods: %w", err)
 		}
 	}
 	return nil
@@ -491,7 +503,10 @@ func List(src, filename string) ([]string, error) {
 
 // commander uses system archiver and decompression programs to read the src archive file.
 func commander(src, filename string) ([]string, error) {
-	c := Content{}
+	c := Content{
+		Ext:   "",
+		Files: []string{},
+	}
 	if err := c.Read(src); err != nil {
 		return nil, fmt.Errorf("commander failed with %s (%q): %w", filename, c.Ext, err)
 	}

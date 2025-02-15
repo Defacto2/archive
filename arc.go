@@ -41,7 +41,6 @@ func (c *Content) ARC(src string) error {
 
 // arcFiles parses the output of the arc list command and returns the listed filenames.
 func arcFiles(out []byte) []string {
-
 	// Name          Length    Date
 	// ============  ========  =========
 	// TESTDAT1.TXT      2009  14 Feb 25

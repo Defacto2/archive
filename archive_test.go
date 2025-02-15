@@ -13,7 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestData is the metadata for the example archive files found in `/testdata`
+const (
+	gzx = ".gz"
+)
+
+// TestData is the metadata for the example archive files found in `/testdata`.
 type TestData struct {
 	WantErr    bool   // WantErr is true if the archive is not supported.
 	Testname   string // Testname is the name of the test case to display when an error occurs.
@@ -26,58 +30,84 @@ type TestData struct {
 
 func Tests() []TestData {
 	return []TestData{
-		{WantErr: false,
+		{
+			WantErr:  false,
 			Testname: "7-Zip",
 			Filename: "7ZIP465.7Z", Ext: ".7z",
-			cmdDos: "P7ZIP.EXE", cmdInfo: "p7zip, February 2009", cmdVersion: "4.65"},
-		{WantErr: false,
+			cmdDos: "P7ZIP.EXE", cmdInfo: "p7zip, February 2009", cmdVersion: "4.65",
+		},
+		{
+			WantErr:  false,
 			Testname: "ARC",
 			Filename: "ARC601.ARC", Ext: ".arc",
-			cmdDos: "ARC.EXE", cmdInfo: "SEA ARC, January 1989", cmdVersion: "6.01"},
-		{WantErr: false,
+			cmdDos: "ARC.EXE", cmdInfo: "SEA ARC, January 1989", cmdVersion: "6.01",
+		},
+		{
+			WantErr:  false,
 			Testname: "ARJ",
 			Filename: "ARJ020B.ARJ", Ext: ".arj",
-			cmdDos: "ARJ.EXE", cmdInfo: "Robert K Jung, December 1990", cmdVersion: "0.20 BETA"},
-		{WantErr: false,
+			cmdDos: "ARJ.EXE", cmdInfo: "Robert K Jung, December 1990", cmdVersion: "0.20 BETA",
+		},
+		{
+			WantErr:  false,
 			Testname: "ARJ with no extension",
 			Filename: "ARJ020B", Ext: ".arj",
-			cmdDos: "ARJ.EXE", cmdInfo: "Robert K Jung, December 1990", cmdVersion: "0.20 BETA"},
-		{WantErr: false,
+			cmdDos: "ARJ.EXE", cmdInfo: "Robert K Jung, December 1990", cmdVersion: "0.20 BETA",
+		},
+		{
+			WantErr:  false,
 			Testname: "BSD Tar",
 			Filename: "BSDTAR37.TAR", Ext: ".tar",
-			cmdDos: "bsdtar", cmdInfo: "bsdtar", cmdVersion: "3.7.4"},
-		{WantErr: false,
+			cmdDos: "bsdtar", cmdInfo: "bsdtar", cmdVersion: "3.7.4",
+		},
+		{
+			WantErr:  false,
 			Testname: "Gzip",
-			Filename: "GZIP113.GZ", Ext: ".gz",
-			cmdDos: "gzip", cmdInfo: "Free Software Foundation, 2023", cmdVersion: "1.13"},
-		{WantErr: false,
+			Filename: "GZIP113.GZ", Ext: gzx,
+			cmdDos: "gzip", cmdInfo: "Free Software Foundation, 2023", cmdVersion: "1.13",
+		},
+		{
+			WantErr:  false,
 			Testname: "LHA/LZH",
 			Filename: "LH113.LZH", Ext: ".lha",
-			cmdDos: "LHARC.EXE", cmdInfo: "LHarc, May 1990", cmdVersion: "1.13"},
-		{WantErr: false,
+			cmdDos: "LHARC.EXE", cmdInfo: "LHarc, May 1990", cmdVersion: "1.13",
+		},
+		{
+			WantErr:  false,
 			Testname: "RAR",
 			Filename: "RAR250.RAR", Ext: ".rar",
-			cmdDos: "RAR.EXE", cmdInfo: "RAR archiver, 1999", cmdVersion: "2.50"},
-		{WantErr: false,
+			cmdDos: "RAR.EXE", cmdInfo: "RAR archiver, 1999", cmdVersion: "2.50",
+		},
+		{
+			WantErr:  false,
 			Testname: "Implode ZIP",
 			Filename: "HWIMPODE.ZIP", Ext: ".zip",
-			cmdDos: "hwzip", cmdInfo: "Impode", cmdVersion: "2.3"},
-		{WantErr: false,
+			cmdDos: "hwzip", cmdInfo: "Impode", cmdVersion: "2.3",
+		},
+		{
+			WantErr:  false,
 			Testname: "Reduce ZIP",
 			Filename: "HWREDUCE.ZIP", Ext: ".zip",
-			cmdDos: "hwzip", cmdInfo: "Reduce", cmdVersion: "2.3"},
-		{WantErr: false,
+			cmdDos: "hwzip", cmdInfo: "Reduce", cmdVersion: "2.3",
+		},
+		{
+			WantErr:  false,
 			Testname: "Shrink ZIP",
 			Filename: "HWSHRINK.ZIP", Ext: ".zip",
-			cmdDos: "hwzip", cmdInfo: "Shrink", cmdVersion: "2.3"},
-		{WantErr: true,
+			cmdDos: "hwzip", cmdInfo: "Shrink", cmdVersion: "2.3",
+		},
+		{
+			WantErr:  true,
 			Testname: "Unsupported Pak",
 			Filename: "PAK100.PAK", Ext: ".pak",
-			cmdDos: "PAK.EXE", cmdInfo: "NoGate Consulting, 1988", cmdVersion: "1.0"},
-		{WantErr: true,
+			cmdDos: "PAK.EXE", cmdInfo: "NoGate Consulting, 1988", cmdVersion: "1.0",
+		},
+		{
+			WantErr:  true,
 			Testname: "Not an archive",
 			Filename: "TESTDAT1.TXT", Ext: ".txt",
-			cmdDos: "", cmdInfo: "", cmdVersion: ""},
+			cmdDos: "", cmdInfo: "", cmdVersion: "",
+		},
 	}
 }
 
@@ -104,7 +134,7 @@ func TestContent_Read(t *testing.T) {
 		const want = 3
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
-			got := archive.Content{}
+			got := archive.Content{Ext: "", Files: []string{}}
 			src := filepath.Join("testdata", tt.Filename)
 			err := got.Read(src)
 			if tt.WantErr {
@@ -113,7 +143,7 @@ func TestContent_Read(t *testing.T) {
 			}
 			require.NoError(t, err)
 			n := len(got.Files)
-			if tt.Ext == ".gz" {
+			if tt.Ext == gzx {
 				// Gzip only contains one file.
 				assert.Equal(t, 1, n)
 				return
@@ -142,7 +172,7 @@ func TestExtractor_Extract(t *testing.T) {
 			require.NoError(t, err)
 			n, err := helper.Count(tmp)
 			require.NoError(t, err)
-			if tt.Ext == ".gz" {
+			if tt.Ext == gzx {
 				// Gzip only contains one file.
 				assert.Equal(t, 1, n)
 				return
@@ -171,7 +201,7 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 			require.NoError(t, err)
 			n, err := helper.Count(tmp)
 			require.NoError(t, err)
-			if tt.Ext == ".gz" {
+			if tt.Ext == gzx {
 				// Gzip only contains one file.
 				assert.Equal(t, 1, n)
 				return
@@ -244,12 +274,16 @@ func TestList(t *testing.T) {
 	}
 }
 
-func TestInvalidFormats(t *testing.T) {
+func TestInvalidFormats(t *testing.T) { //nolint:cyclop
+	t.Parallel()
 	for _, tt := range Tests() {
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
-			c := archive.Content{}
+			c := archive.Content{
+				Ext:   "",
+				Files: []string{},
+			}
 			tmp := t.TempDir()
 			if !strings.EqualFold(tt.Ext, ".7z") {
 				err := c.Zip7(src)
@@ -272,7 +306,7 @@ func TestInvalidFormats(t *testing.T) {
 				err = x.ARJ()
 				require.Error(t, err)
 			}
-			if !strings.EqualFold(tt.Ext, ".gz") {
+			if !strings.EqualFold(tt.Ext, gzx) {
 				err := c.Gzip(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
@@ -324,14 +358,22 @@ func TestHardLink(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"Missing ARJ extension", ".arj", "ARCHIVE",
-			"ARCHIVE.arj", false},
-		{"Missing TAR GZ extension", ".tar.gz", "ARCHIVE",
-			"ARCHIVE.tar.gz", false},
-		{"Not a valid extension", "arj", "ARCHIVE",
-			"ARCHIVE.arj", true},
-		{"Using ARJ extension", ".arj", "ARCHIVE.arj",
-			"", false},
+		{
+			"Missing ARJ extension", ".arj", "ARCHIVE",
+			"ARCHIVE.arj", false,
+		},
+		{
+			"Missing TAR GZ extension", ".tar.gz", "ARCHIVE",
+			"ARCHIVE.tar.gz", false,
+		},
+		{
+			"Not a valid extension", "arj", "ARCHIVE",
+			"ARCHIVE.arj", true,
+		},
+		{
+			"Using ARJ extension", ".arj", "ARCHIVE.arj",
+			"", false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

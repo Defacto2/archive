@@ -13,13 +13,14 @@ package pkzip
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 )
 
-var ErrPassParse = fmt.Errorf("zip archive uses a passparse")
+var ErrPassParse = errors.New("zip archive uses a passparse")
 
 // Compression is the PKZip compression method used by a ZIP archive file.
 type Compression uint16
@@ -81,7 +82,7 @@ func (c Compression) String() string {
 
 // Zip returns true if the compression method is Deflated or Stored.
 func (c Compression) Zip() bool {
-	switch c {
+	switch c { //nolint:exhaustive
 	case Stored, Deflated:
 		return true
 	}
@@ -162,10 +163,11 @@ func ExitStatus(err error) Diagnostic {
 		return Diagnostic(unused)
 	}
 	s := strings.TrimSpace(strings.TrimPrefix(err.Error(), status))
-	code, err := strconv.ParseInt(s, 10, 16)
+	code, err := strconv.ParseUint(s, 10, 16)
 	if err != nil {
 		return Diagnostic(unused)
 	}
+
 	return Diagnostic(code)
 }
 
@@ -179,7 +181,8 @@ func Methods(name string) ([]Compression, error) {
 	methods := []Compression{}
 	for _, file := range r.File {
 		fh := file.FileHeader
-		if encrypted := fh.Flags&0x1 != 0; encrypted {
+		const encrypted = 0x1
+		if locked := fh.Flags&encrypted != 0; locked {
 			return nil, ErrPassParse
 		}
 		methods = append(methods, Compression(fh.Method))

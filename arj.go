@@ -51,7 +51,6 @@ func (c *Content) ARJ(src string) error {
 
 // arjFiles parses the output of the arj list command and returns the listed filenames.
 func arjFiles(out []byte) []string {
-
 	// Filename       Original Compressed Ratio DateTime modified Attributes/GUA BPMGS
 	// ------------ ---------- ---------- ----- ----------------- -------------- -----
 	// TESTDAT1.TXT       2009        889 0.443 25-02-14 13:21:10                  1
@@ -60,6 +59,7 @@ func arjFiles(out []byte) []string {
 	// ------------ ---------- ---------- -----
 	//      3 files      83888      23593 0.281
 
+	const tableEnd = 2
 	skip1 := []byte("Filename       Original")
 	skip2 := []byte("------------ ----------")
 	files := []string{}
@@ -76,7 +76,7 @@ func arjFiles(out []byte) []string {
 		if skipped == 0 {
 			continue
 		}
-		if skipped > 2 {
+		if skipped > tableEnd {
 			return files
 		}
 		file := string(line[0:12])

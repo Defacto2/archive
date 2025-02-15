@@ -45,7 +45,6 @@ func (c *Content) LHA(src string) error {
 
 // lhaFiles parses the output of the lha list command and returns the listed filenames.
 func lhaFiles(out []byte) []string {
-
 	// PERMSSN    UID  GID      SIZE  RATIO     STAMP           NAME
 	// ---------- ----------- ------- ------ ------------ --------------------
 	// [generic]                 2009  48.8% Feb 14 13:21 testdat1.txt
@@ -54,6 +53,7 @@ func lhaFiles(out []byte) []string {
 	// ---------- ----------- ------- ------ ------------ --------------------
 	//  Total         3 files   83888  30.2% Feb 14 07:19
 
+	const tableEnd = 2
 	skip1 := []byte("PERMSSN    UID  GID")
 	skip2 := []byte("---------- -----------")
 	const padd = len("---------- ----------- ------- ------ ------------ ")
@@ -71,7 +71,7 @@ func lhaFiles(out []byte) []string {
 		if skipped == 0 {
 			continue
 		}
-		if skipped > 2 {
+		if skipped > tableEnd {
 			return files
 		}
 		if len(line) < padd {
@@ -113,11 +113,14 @@ func (x Extractor) LHA(targets ...string) error {
 	defer cancel()
 	// example command: lha -eq2w=destdir/ archive *
 	const (
-		extract     = "e" // "Extract archive. Files are extracted to the current working directory unless the 'w' option is specified."
-		ignorepaths = "i" // "Ignore paths of archived files: extract all archived files to  the  same  directory, ignoring subdirectories."
-		overwrite   = "f" // "Force overwrite of existing files: do not prompt"
-		quiet       = "q1"
-		quieter     = "q2"
+		// "Files are extracted to the current working directory unless the 'w' option is specified."
+		extract = "e"
+		// "Ignore paths of archived files: extract all archived files to  the  same  directory, ignoring subdirectories."
+		ignorepaths = "i"
+		// "Force overwrite of existing files: do not prompt"
+		overwrite = "f"
+		quiet     = "q1"
+		quieter   = "q2"
 	)
 	param := fmt.Sprintf("-%s%s%sw=%s", extract, overwrite, ignorepaths, dst)
 	args := []string{param, src}

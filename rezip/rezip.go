@@ -128,7 +128,7 @@ func Test(name string) error {
 	err = exec.Command(path, testArg, name).Run()
 	if err != nil {
 		diag := pkzip.ExitStatus(err)
-		switch diag {
+		switch diag { //nolint:exhaustive
 		case pkzip.Normal, pkzip.Warning:
 			// normal or warnings are fine
 			return nil

@@ -45,7 +45,6 @@ func (c *Content) Zip7(src string) error {
 
 // zip7files parses the output of the 7z list command and returns the listed filenames.
 func zip7files(out []byte) []string {
-
 	//    Date      Time    Attr         Size   Compressed  Name
 	// ------------------- ----- ------------ ------------  ------------------------
 	// 2025-02-15 00:21:10 ....A         2009        20465  TESTDAT1.TXT
@@ -54,6 +53,7 @@ func zip7files(out []byte) []string {
 	// ------------------- ----- ------------ ------------  ------------------------
 	// 2025-02-15 00:21:10              83888        20465  3 files
 
+	const tableEnd = 2
 	skip1 := []byte("   Date      Time  ")
 	skip2 := []byte("-------------------")
 	const padd = len("------------------- ----- ------------ ------------  ")
@@ -71,7 +71,7 @@ func zip7files(out []byte) []string {
 		if skipped == 0 {
 			continue
 		}
-		if skipped > 2 {
+		if skipped > tableEnd {
 			return files
 		}
 		if len(line) < padd {
