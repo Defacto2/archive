@@ -24,7 +24,7 @@ import (
 func (c *Content) Rar(src string) error {
 	prog, err := exec.LookPath(command.Unrar)
 	if err != nil {
-		return fmt.Errorf("archive unrar reader %w", err)
+		return fmt.Errorf("content unrar %w", err)
 	}
 	const (
 		listBrief  = "lb"
@@ -37,7 +37,7 @@ func (c *Content) Rar(src string) error {
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("archive unrar output %w: %s", err, src)
+		return fmt.Errorf("content unrar %w: %s", err, src)
 	}
 	if len(out) == 0 {
 		return ErrRead
@@ -63,7 +63,7 @@ func (x Extractor) Rar(targets ...string) error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unrar)
 	if err != nil {
-		return fmt.Errorf("archive unrar extract %w", err)
+		return fmt.Errorf("extract unrar %w", err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -86,9 +86,9 @@ func (x Extractor) Rar(targets ...string) error {
 	cmd.Stderr = &b
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("archive unrar %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+			return fmt.Errorf("extract unrar %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("archive unrar %w: %s", err, prog)
+		return fmt.Errorf("extract unrar %w: %s", err, prog)
 	}
 	return nil
 }

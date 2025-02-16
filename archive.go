@@ -1,7 +1,8 @@
 // Package archive provides compressed and stored archive file extraction and content listing.
 //
-// The file archive formats supported are 7Zip, ARC, ARJ, LHA, LZH, RAR, TAR, and ZIP,
-// including the deflate, implode, and shrink compression methods.
+// The file archive formats supported are 7-Zip, ARC, ARJ, CAB, LHA, LZH, RAR, TAR, compressed TAR, and ZIP.
+//
+// ZIP includes the deflate, implode, shrink, and store methods.
 //
 // The package uses following Linux terminal programs for legacy file support.
 //
@@ -13,6 +14,7 @@
 //  5. [tar] - GNU tar
 //  6. [unrar] - 6.24 freeware by Alexander Roshal, not the common [unrar-free] which is feature incomplete
 //  7. [zipinfo] - ZipInfo v3 by the Info-ZIP workgroup
+//  8. [gcab] - Found with in Linux is in the Gnome msitools package
 //
 // [7zz]: https://www.7-zip.org/
 // [arc]: https://linux.die.net/man/1/arc
@@ -23,6 +25,7 @@
 // [unrar]: https://www.rarlab.com/rar_add.htm
 // [unrar-free]: https://gitlab.com/bgermann/unrar-free
 // [zipinfo]: https://infozip.sourceforge.net/
+// [gcab]: https://man.archlinux.org/man/gcab.1.en
 package archive
 
 // More details on Linux decompression programs:
@@ -61,6 +64,7 @@ const (
 	arcx  = ".arc" // ARC by System Enhancement Associates
 	arjx  = ".arj" // Archived by Robert Jung
 	bz2x  = ".bz2" // Bzip2 by Julian Seward
+	cabx  = ".cab" // Microsoft Cabinet by Microsoft
 	gzipx = ".gz"  // GNU Zip by Jean-loup Gailly and Mark Adler
 	lhax  = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
 	lhzx  = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
@@ -116,6 +120,7 @@ func MagicExt(src string) (string, error) {
 		"arc archive data":                  arcx,
 		"arj archive data":                  arjx,
 		"bzip2 compressed data":             ".bz2",
+		"microsoft cabinet archive data":    cabx,
 		"gzip compressed data":              gzipx,
 		"rar archive data":                  rarx,
 		"posix tar archive":                 tarx,
@@ -198,6 +203,10 @@ func (c *Content) Read(src string) error {
 	if err != nil {
 		return fmt.Errorf("content read %w", err)
 	}
+	return c.readers(src, ext)
+}
+
+func (c *Content) readers(src, ext string) error {
 	switch strings.ToLower(ext) {
 	case zip7x:
 		return c.Zip7(src)
@@ -205,6 +214,8 @@ func (c *Content) Read(src string) error {
 		return c.ARC(src)
 	case arjx:
 		return c.ARJ(src)
+	case cabx:
+		return c.Cab(src)
 	case gzipx, tgzx:
 		return c.Gzip(src)
 	case lhax, lhzx:

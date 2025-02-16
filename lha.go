@@ -21,7 +21,7 @@ import (
 func (c *Content) LHA(src string) error {
 	prog, err := exec.LookPath(command.Lha)
 	if err != nil {
-		return fmt.Errorf("archive lha reader %w", err)
+		return fmt.Errorf("content lha %w", err)
 	}
 
 	const list = "-l"
@@ -33,7 +33,7 @@ func (c *Content) LHA(src string) error {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("archive lha output %w", err)
+		return fmt.Errorf("content lha %w", err)
 	}
 	if notLHA(out) {
 		return ErrRead
@@ -106,7 +106,7 @@ func (x Extractor) LHA(targets ...string) error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Lha)
 	if err != nil {
-		return fmt.Errorf("archive lha extract %w", err)
+		return fmt.Errorf("extract lha %w", err)
 	}
 	var b bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
@@ -136,9 +136,9 @@ func (x Extractor) LHA(targets ...string) error {
 	out, err := cmd.Output()
 	if err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("archive lha %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+			return fmt.Errorf("extract lha %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("archive lha %w: %s", err, prog)
+		return fmt.Errorf("extract lha %w: %s", err, prog)
 	}
 	if len(out) == 0 {
 		return ErrRead

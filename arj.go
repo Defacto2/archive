@@ -20,12 +20,12 @@ import (
 func (c *Content) ARJ(src string) error {
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
-		return fmt.Errorf("archive arj reader %w", err)
+		return fmt.Errorf("content arj %w", err)
 	}
 
 	newname := src
 	if name, err := HardLink(arjx, src); err != nil {
-		return fmt.Errorf("archive arj %w", err)
+		return fmt.Errorf("content arj %w", err)
 	} else if name != "" {
 		newname = name
 		defer os.Remove(name)
@@ -39,7 +39,7 @@ func (c *Content) ARJ(src string) error {
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("archive arj output %w", err)
+		return fmt.Errorf("content arj %w", err)
 	}
 	if notArj(out) {
 		return ErrRead
@@ -108,12 +108,12 @@ func (x Extractor) ARJ(targets ...string) error {
 	// note: only use arj, as unarj offers limited functionality
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
-		return fmt.Errorf("archive arj extract %w", err)
+		return fmt.Errorf("extract arj %w", err)
 	}
 
 	newname := src
 	if name, err := HardLink(arjx, src); err != nil {
-		return fmt.Errorf("archive arj %w", err)
+		return fmt.Errorf("extract arj %w", err)
 	} else if name != "" {
 		newname = name
 		defer os.Remove(name)
@@ -135,10 +135,10 @@ func (x Extractor) ARJ(targets ...string) error {
 	cmd.Stderr = &b
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("archive arj %w: %s: %q",
+			return fmt.Errorf("extract arj %w: %s: %q",
 				ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("archive arj %w: %s", err, prog)
+		return fmt.Errorf("extract arj %w: %s", err, prog)
 	}
 	return nil
 }

@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+
+	"github.com/Defacto2/archive/command"
 )
 
 // Package file tar.go contains the BSD Tar compression methods.
@@ -16,9 +18,9 @@ import (
 //
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 func (c *Content) Tar(src string) error {
-	prog, err := exec.LookPath("tar")
+	prog, err := exec.LookPath(command.BSDTar)
 	if err != nil {
-		return fmt.Errorf("archive tar reader %w", err)
+		return fmt.Errorf("content tar %w", err)
 	}
 	const list = "-tf"
 	var b bytes.Buffer
@@ -28,7 +30,7 @@ func (c *Content) Tar(src string) error {
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("archive tar output %w", err)
+		return fmt.Errorf("content tar %w", err)
 	}
 	if len(out) == 0 {
 		return ErrRead
@@ -53,9 +55,9 @@ func (c *Content) Tar(src string) error {
 // [libarchive library]: http://www.libarchive.org/
 func (x Extractor) Tar(targets ...string) error {
 	src, dst := x.Source, x.Destination
-	prog, err := exec.LookPath("bsdtar")
+	prog, err := exec.LookPath(command.BSDTar)
 	if err != nil {
-		return fmt.Errorf("archive tar extract %w", err)
+		return fmt.Errorf("extract tar %w", err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -84,9 +86,9 @@ func (x Extractor) Tar(targets ...string) error {
 	cmd.Stderr = &b
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("archive tar %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+			return fmt.Errorf("extract tar %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("archive tar %w: %s", err, prog)
+		return fmt.Errorf("extract tar %w: %s", err, prog)
 	}
 	return nil
 }

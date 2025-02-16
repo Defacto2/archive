@@ -23,7 +23,7 @@ import (
 func (c *Content) Zip7(src string) error {
 	prog, err := exec.LookPath(command.Zip7)
 	if err != nil {
-		return fmt.Errorf("content 7zip reader %w", err)
+		return fmt.Errorf("content 7zip %w", err)
 	}
 	const list = "l"
 	var b bytes.Buffer
@@ -33,7 +33,7 @@ func (c *Content) Zip7(src string) error {
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("content 7zip output %w", err)
+		return fmt.Errorf("content 7zip %w", err)
 	}
 	if not7zip(out) {
 		return ErrRead
@@ -106,7 +106,7 @@ func (x Extractor) Zip7(targets ...string) error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Zip7)
 	if err != nil {
-		return fmt.Errorf("extractor 7z %w", err)
+		return fmt.Errorf("extract 7z %w", err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -114,9 +114,9 @@ func (x Extractor) Zip7(targets ...string) error {
 
 	// as the 7z program supports many archive formats, restrict it to 7z
 	if ext, err := MagicExt(src); err != nil {
-		return fmt.Errorf("extractor 7z %w: %s", err, src)
+		return fmt.Errorf("extract 7z %w: %s", err, src)
 	} else if ext != zip7x {
-		return fmt.Errorf("extractor 7z %w: %s", ErrExt, src)
+		return fmt.Errorf("extract 7z %w: %s", ErrExt, src)
 	}
 
 	var b bytes.Buffer
@@ -135,9 +135,9 @@ func (x Extractor) Zip7(targets ...string) error {
 	cmd.Stderr = &b
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("extractor 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+			return fmt.Errorf("extract 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("extractor 7z %w: %s", err, prog)
+		return fmt.Errorf("extract 7z %w: %s", err, prog)
 	}
 	return nil
 }

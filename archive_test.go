@@ -69,6 +69,12 @@ func Tests() []TestData {
 		},
 		{
 			WantErr:  false,
+			Testname: "Microsoft Cabinet",
+			Filename: "GCAB16.CAB", Ext: ".cab",
+			cmdDos: "gcab", cmdInfo: "Microsoft Cabinet using Linux gcab", cmdVersion: "1.6",
+		},
+		{
+			WantErr:  false,
 			Testname: "Gzip BSD Tar",
 			Filename: "BSDTAR37.TAR.gz", Ext: ".tgz",
 			cmdDos: "bsdtar", cmdInfo: "bsdtar", cmdVersion: "3.7.4",
@@ -365,7 +371,7 @@ func TestInvalidFormats(t *testing.T) { //nolint:cyclop
 				err = x.Rar()
 				require.Error(t, err)
 			}
-			skipExts := []string{".7z", ".bz2", ".tar", ".tgz", ".xz", ".zst"}
+			skipExts := []string{".7z", ".bz2", ".cab", ".lha", ".tar", ".tgz", ".xz", ".zst", ".zip"}
 			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
 				err := c.Tar(src)
 				require.Error(t, err)

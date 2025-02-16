@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/helper"
 )
 
@@ -18,9 +19,9 @@ import (
 //
 // [gzip]: https://www.gnu.org/software/gzip/
 func (c *Content) Gzip(src string) error {
-	prog, err := exec.LookPath("gzip")
+	prog, err := exec.LookPath(command.Gzip)
 	if err != nil {
-		return fmt.Errorf("gzip content %w", err)
+		return fmt.Errorf("content gzip %w", err)
 	}
 	const test = "-t"
 	var b bytes.Buffer
@@ -30,7 +31,7 @@ func (c *Content) Gzip(src string) error {
 	cmd.Stderr = &b
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("gzip content %w", err)
+		return fmt.Errorf("content gzip %w", err)
 	}
 	out = bytes.TrimSpace(out)
 	if bytes.Contains(out, []byte("not in gzip format")) {
@@ -136,7 +137,7 @@ func opentarball(name string) (Extractor, error) {
 	tarball := filepath.Join(dir, GzipName(name))
 	_, err := os.Stat(tarball)
 	if err != nil {
-		return empty, fmt.Errorf("extract tarball %w", err)
+		return empty, fmt.Errorf("open tarball %w", err)
 	}
 	if magic, _ := MagicExt(tarball); magic != tarx {
 		return empty, nil
@@ -166,7 +167,7 @@ func (x Extractor) tarball(targets ...string) error {
 
 func (x Extractor) gzip() (method, error) {
 	src, dst := x.Source, x.Destination
-	prog, err := exec.LookPath("gzip")
+	prog, err := exec.LookPath(command.Gzip)
 	if err != nil {
 		return method{}, fmt.Errorf("extract gzip %w", err)
 	}

@@ -20,7 +20,7 @@ import (
 func (c *Content) Zip(src string) error {
 	prog, err := exec.LookPath(command.ZipInfo)
 	if err != nil {
-		return fmt.Errorf("archive zipinfo reader %w", err)
+		return fmt.Errorf("content zipinfo %w", err)
 	}
 	const list = "-1"
 	var b bytes.Buffer
@@ -36,7 +36,7 @@ func (c *Content) Zip(src string) error {
 			return nil
 		}
 		// otherwise the zipinfo threw an error
-		return fmt.Errorf("archive zipinfo %w: %s", err, src)
+		return fmt.Errorf("content zipinfo %w: %s", err, src)
 	}
 	if len(out) == 0 {
 		return ErrRead
@@ -58,7 +58,7 @@ func (x Extractor) Zip(targets ...string) error {
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unzip)
 	if err != nil {
-		return fmt.Errorf("archive zip extract %w", err)
+		return fmt.Errorf("extract unzip %w", err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -90,9 +90,9 @@ func (x Extractor) Zip(targets ...string) error {
 	cmd.Stderr = &b
 	if err = cmd.Run(); err != nil {
 		if b.String() != "" {
-			return fmt.Errorf("archive zip %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+			return fmt.Errorf("extract unzip %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
 		}
-		return fmt.Errorf("archive zip %w: %s", err, prog)
+		return fmt.Errorf("extract unzip %w: %s", err, prog)
 	}
 	return nil
 }
