@@ -60,14 +60,17 @@ const (
 const (
 	arcx  = ".arc" // ARC by System Enhancement Associates
 	arjx  = ".arj" // Archived by Robert Jung
+	bz2x  = ".bz2" // Bzip2 by Julian Seward
 	gzipx = ".gz"  // GNU Zip by Jean-loup Gailly and Mark Adler
 	lhax  = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
 	lhzx  = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
 	rarx  = ".rar" // Roshal ARchive by Alexander Roshal
 	tarx  = ".tar" // Tape ARchive by AT&T Bell Labs
 	tgzx  = ".tgz" // Tape ARchive by AT&T Bell Labs and GNU Zip
+	xzx   = ".xz"  // XZ Utils
 	zipx  = ".zip" // Phil Katz's ZIP for MS-DOS systems
 	zip7x = ".7z"  // 7-Zip by Igor Pavlov
+	zstdx = ".zst" // Zstandard by Yann Collet
 )
 
 var (
@@ -110,14 +113,16 @@ func MagicExt(src string) (string, error) {
 	}
 	magics := map[string]string{
 		// note these are the outputs from the `file` command
-		"arc archive data":      arcx,
-		"arj archive data":      arjx,
-		"bzip2 compressed data": ".bz2",
-		"gzip compressed data":  gzipx,
-		"rar archive data":      rarx,
-		"posix tar archive":     tarx,
-		"zip archive data":      zipx,
-		"7-zip archive data":    zip7x,
+		"arc archive data":                  arcx,
+		"arj archive data":                  arjx,
+		"bzip2 compressed data":             ".bz2",
+		"gzip compressed data":              gzipx,
+		"rar archive data":                  rarx,
+		"posix tar archive":                 tarx,
+		"xz compressed data":                xzx,
+		"zip archive data":                  zipx,
+		"7-zip archive data":                zip7x,
+		"zstandard compressed data (v0.8+)": zstdx,
 	}
 	s := strings.Split(strings.ToLower(string(out)), ",")
 	magic := strings.TrimSpace(s[0])
@@ -206,7 +211,7 @@ func (c *Content) Read(src string) error {
 		return c.LHA(src)
 	case rarx:
 		return c.Rar(src)
-	case tarx:
+	case bz2x, tarx, xzx, zstdx:
 		return c.Tar(src)
 	case zipx:
 		return c.Zip(src)
@@ -293,6 +298,10 @@ func (x Extractor) Extract(targets ...string) error {
 	return x.checkSign(sign, targets...)
 }
 
+// checkSign is used to determine the correct extraction method for the source archive.
+//
+// Compressed tarballs signatures are determined by the compression method, not the tarball format.
+// For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
 func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) error {
 	switch sign { //nolint:exhaustive
 	case magicnumber.GzipCompressArchive:
@@ -300,7 +309,7 @@ func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) erro
 	case
 		magicnumber.PKWAREZipReduce,
 		magicnumber.PKWAREZipShrink:
-		return x.ZipHW() // TODO: work around, extract all to temp directory and move to destination
+		return x.ZipHW()
 	case
 		magicnumber.Bzip2CompressArchive,
 		magicnumber.MicrosoftCABinet,

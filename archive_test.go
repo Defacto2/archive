@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -62,6 +63,12 @@ func Tests() []TestData {
 		},
 		{
 			WantErr:  false,
+			Testname: "Bzip2",
+			Filename: "bzip2.tar.bz2", Ext: ".bz2",
+			cmdDos: "bzip2", cmdInfo: "bzip2", cmdVersion: "1.0.8",
+		},
+		{
+			WantErr:  false,
 			Testname: "Gzip BSD Tar",
 			Filename: "BSDTAR37.TAR.gz", Ext: ".tgz",
 			cmdDos: "bsdtar", cmdInfo: "bsdtar", cmdVersion: "3.7.4",
@@ -83,6 +90,18 @@ func Tests() []TestData {
 			Testname: "RAR",
 			Filename: "RAR250.RAR", Ext: ".rar",
 			cmdDos: "RAR.EXE", cmdInfo: "RAR archiver, 1999", cmdVersion: "2.50",
+		},
+		{
+			WantErr:  false,
+			Testname: "XZ Utils",
+			Filename: "XZUtils.tar.xz", Ext: ".xz",
+			cmdDos: "xz", cmdInfo: "XZ Utils", cmdVersion: "5.6.2",
+		},
+		{
+			WantErr:  false,
+			Testname: "Zstandard",
+			Filename: "Zstandard.tar.zst", Ext: ".zst",
+			cmdDos: "zstd", cmdInfo: "Zstandard by Yann Collet", cmdVersion: "1.5.6",
 		},
 		{
 			WantErr:  false,
@@ -346,9 +365,8 @@ func TestInvalidFormats(t *testing.T) { //nolint:cyclop
 				err = x.Rar()
 				require.Error(t, err)
 			}
-			if !strings.EqualFold(tt.Ext, ".tar") &&
-				!strings.EqualFold(tt.Ext, ".tgz") &&
-				!strings.EqualFold(tt.Ext, ".7z") {
+			skipExts := []string{".7z", ".bz2", ".tar", ".tgz", ".xz", ".zst"}
+			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
 				err := c.Tar(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}

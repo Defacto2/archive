@@ -111,7 +111,7 @@ func (c *Content) readTarball(src string) error {
 // container formats, [gzip] only compresses a single file.
 //
 // The targets are only used for the tarball gzip (.tar.gz) archive format,
-// and otherwise ignored.
+// otherwise it is ignored.
 //
 // [gzip]: https://www.gnu.org/software/gzip/
 func (x Extractor) Gzip(targets ...string) error {
