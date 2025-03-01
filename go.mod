@@ -3,7 +3,7 @@ module github.com/Defacto2/archive
 go 1.24.0
 
 require (
-	github.com/Defacto2/helper v1.4.0
+	github.com/Defacto2/helper v1.4.1
 	github.com/Defacto2/magicnumber v1.0.7
 	github.com/stretchr/testify v1.10.0
 )
