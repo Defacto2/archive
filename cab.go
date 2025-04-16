@@ -23,11 +23,11 @@ func (c *Content) Cab(src string) error {
 		return fmt.Errorf("cab reader %w", err)
 	}
 	const list = "--list"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("cab output %w", err)

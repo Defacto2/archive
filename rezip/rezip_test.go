@@ -26,28 +26,28 @@ func TestCompress(t *testing.T) {
 	src := td("TEST.EXE")
 	dest := filepath.Join(tmp, "zip_test.zip")
 
-	st, err := os.Stat(src)
+	inf, err := os.Stat(src)
 	require.NoError(t, err)
 
-	n, err := rezip.Compress(src, dest)
+	size, err := rezip.Compress(src, dest)
 	require.NoError(t, err)
 
-	assert.Equal(t, int64(n), st.Size())
+	assert.Equal(t, int64(size), inf.Size())
 
 	// confirm the zip file is smaller than the total size of the files
-	st, err = os.Stat(dest)
+	inf, err = os.Stat(dest)
 	require.NoError(t, err)
-	assert.Less(t, st.Size(), int64(n))
+	assert.Less(t, inf.Size(), int64(size))
 
 	// confirm command fails when the file already exists
-	n, err = rezip.Compress(src, dest)
+	size, err = rezip.Compress(src, dest)
 	require.Error(t, err)
-	require.Zero(t, n)
+	require.Zero(t, size)
 
 	// confirm command fails when the dest is a directory
-	n, err = rezip.Compress(src, tmp)
+	size, err = rezip.Compress(src, tmp)
 	require.Error(t, err)
-	require.Zero(t, n)
+	require.Zero(t, size)
 }
 
 func TestCompressDir(t *testing.T) {
@@ -57,16 +57,16 @@ func TestCompressDir(t *testing.T) {
 	srcDir := td("")
 	dest := filepath.Join(tmp, "unzip_test.zip")
 
-	n, err := rezip.CompressDir(srcDir, dest)
+	size, err := rezip.CompressDir(srcDir, dest)
 	require.NoError(t, err)
 
 	const fourMB = 4 * 1024 * 1024
-	assert.Greater(t, n, int64(fourMB))
+	assert.Greater(t, size, int64(fourMB))
 
 	// confirm the zip file is smaller than the total size of the files
-	st, err := os.Stat(dest)
+	inf, err := os.Stat(dest)
 	require.NoError(t, err)
-	assert.Less(t, st.Size(), n)
+	assert.Less(t, inf.Size(), size)
 }
 
 func TestUnzip(t *testing.T) {

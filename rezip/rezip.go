@@ -35,10 +35,10 @@ func Compress(name, dest string) (int, error) {
 	}
 	defer zipfile.Close()
 
-	w := zip.NewWriter(zipfile)
-	defer w.Close()
+	zipper := zip.NewWriter(zipfile)
+	defer zipper.Close()
 
-	zipWr, err := w.Create(filepath.Base(name))
+	zipWr, err := zipper.Create(filepath.Base(name))
 	if err != nil {
 		return 0, fmt.Errorf("rezip compress failed to create writer: %w", err)
 	}
@@ -66,8 +66,8 @@ func CompressDir(root, dest string) (int64, error) {
 	}
 	defer zipfile.Close()
 
-	w := zip.NewWriter(zipfile)
-	defer w.Close()
+	zipper := zip.NewWriter(zipfile)
+	defer zipper.Close()
 
 	var written int64
 	addFile := func(path string, info os.FileInfo, err error) error {
@@ -84,7 +84,7 @@ func CompressDir(root, dest string) (int64, error) {
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
-		zipWr, err := w.Create(rel)
+		zipWr, err := zipper.Create(rel)
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
@@ -115,14 +115,14 @@ func Test(name string) error {
 	if err != nil {
 		return fmt.Errorf("rezip test failed to find rezip executable: %w", err)
 	}
-	st, err := os.Stat(name)
+	inf, err := os.Stat(name)
 	if err != nil {
 		return fmt.Errorf("rezip test failed to stat file: %w", err)
 	}
-	if st.IsDir() {
+	if inf.IsDir() {
 		return fmt.Errorf("%w: %s is a directory", ErrTest, name)
 	}
-	if st.Size() == 0 {
+	if inf.Size() == 0 {
 		return fmt.Errorf("%w: %s is empty", ErrTest, name)
 	}
 	err = exec.Command(path, testArg, name).Run()

@@ -173,13 +173,13 @@ func ExitStatus(err error) Diagnostic {
 
 // Methods returns the PKZip compression methods used in the named file.
 func Methods(name string) ([]Compression, error) {
-	r, err := zip.OpenReader(name)
+	zipf, err := zip.OpenReader(name)
 	if err != nil {
 		return nil, fmt.Errorf("pkzip methods: %w", err)
 	}
-	defer r.Close()
+	defer zipf.Close()
 	methods := []Compression{}
-	for _, file := range r.File {
+	for _, file := range zipf.File {
 		fh := file.FileHeader
 		const encrypted = 0x1
 		if locked := fh.Flags&encrypted != 0; locked {

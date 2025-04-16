@@ -22,11 +22,11 @@ func (c *Content) ARC(src string) error {
 		return fmt.Errorf("content arc %w", err)
 	}
 	const list = "l"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("content arc %w", err)

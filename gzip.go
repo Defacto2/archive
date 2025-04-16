@@ -24,11 +24,11 @@ func (c *Content) Gzip(src string) error {
 		return fmt.Errorf("content gzip %w", err)
 	}
 	const test = "-t"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, test, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("content gzip %w", err)
@@ -88,11 +88,11 @@ func (c *Content) readTarball(src string) error {
 	}
 	s := strings.TrimSuffix(filepath.Base(src), gzipx)
 	name := filepath.Join(tmp, s)
-	st, err := os.Stat(name)
+	inf, err := os.Stat(name)
 	if err != nil {
 		return fmt.Errorf("read tarball %w", err)
 	}
-	if st.IsDir() {
+	if inf.IsDir() {
 		return fmt.Errorf("read tarball %w", err)
 	}
 	ext, err := MagicExt(name)
@@ -186,7 +186,7 @@ func (x Extractor) gzip() (method, error) {
 		return method{}, fmt.Errorf("extract gzip %w", err)
 	}
 
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	const (
@@ -196,10 +196,10 @@ func (x Extractor) gzip() (method, error) {
 	)
 	args := []string{decompress, restore, overwrite, name}
 	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
-			return method{}, fmt.Errorf("extract gzip %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+		if buf.String() != "" {
+			return method{}, fmt.Errorf("extract gzip %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return method{}, fmt.Errorf("extract gzip %w: %s", err, prog)
 	}

@@ -30,11 +30,11 @@ func (c *Content) Rar(src string) error {
 		listBrief  = "lb"
 		noComments = "-c-"
 	)
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, listBrief, "-ep", noComments, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("content unrar %w: %s", err, src)
@@ -68,7 +68,7 @@ func (x Extractor) Rar(targets ...string) error {
 	if dst == "" {
 		return ErrDest
 	}
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	const (
@@ -83,10 +83,10 @@ func (x Extractor) Rar(targets ...string) error {
 	args = append(args, targets...)
 	args = append(args, outputPath+dst)
 	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
-			return fmt.Errorf("extract unrar %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+		if buf.String() != "" {
+			return fmt.Errorf("extract unrar %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf("extract unrar %w: %s", err, prog)
 	}

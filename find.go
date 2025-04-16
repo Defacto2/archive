@@ -41,7 +41,7 @@ func (f Finds) BestMatch() string {
 // Note the filename matches are case-insensitive as many handled file archives are
 // created on Windows FAT32, NTFS or MS-DOS FAT16 file systems.
 func Readme(filename string, files ...string) string {
-	f := make(Finds)
+	finds := make(Finds)
 	for _, file := range files {
 		name := strings.ToLower(file)
 		base := strings.ToLower(strings.TrimSuffix(filename, filepath.Ext(filename)))
@@ -52,9 +52,9 @@ func Readme(filename string, files ...string) string {
 		default:
 			continue
 		}
-		f = matchs(file, name, base, f)
+		finds = matchs(file, name, base, finds)
 	}
-	return f.BestMatch()
+	return finds.BestMatch()
 }
 
 const (
@@ -63,34 +63,34 @@ const (
 	txt = ".txt"
 )
 
-func matchs(file, name, base string, f Finds) Finds {
+func matchs(file, name, base string, finds Finds) Finds {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch {
 	case name == base+nfo:
 		// [archive name].nfo
-		f[file] = Lvl1
+		finds[file] = Lvl1
 	case name == base+txt:
 		// [archive name].txt
-		f[file] = Lvl2
+		finds[file] = Lvl2
 	case ext == nfo:
 		// [random].nfo
-		f[file] = Lvl3
+		finds[file] = Lvl3
 	case name == "file_id.diz":
 		// BBS file description
-		f[file] = Lvl4
+		finds[file] = Lvl4
 	case name == base+diz:
 		// [archive name].diz
-		f[file] = Lvl5
+		finds[file] = Lvl5
 	case ext == txt:
 		// [random].txt
-		f[file] = Lvl6
+		finds[file] = Lvl6
 	case ext == diz:
 		// [random].diz
-		f[file] = Lvl7
+		finds[file] = Lvl7
 	default:
 		// currently lacking is [group name].nfo and [group name].txt priorities
 	}
-	return f
+	return finds
 }
 
 // Usability of search, filename pattern matches.

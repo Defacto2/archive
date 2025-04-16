@@ -129,8 +129,8 @@ func MagicExt(src string) (string, error) {
 		"7-zip archive data":                zip7x,
 		"zstandard compressed data (v0.8+)": zstdx,
 	}
-	s := strings.Split(strings.ToLower(string(out)), ",")
-	magic := strings.TrimSpace(s[0])
+	result := strings.Split(strings.ToLower(string(out)), ",")
+	magic := strings.TrimSpace(result[0])
 	if foundLHA(magic) {
 		return lhax, nil
 	}
@@ -138,7 +138,7 @@ func MagicExt(src string) (string, error) {
 		return tgzx, nil
 	}
 	for magic, ext := range magics {
-		if strings.TrimSpace(s[0]) == magic {
+		if strings.TrimSpace(result[0]) == magic {
 			return ext, nil
 		}
 	}
@@ -147,21 +147,21 @@ func MagicExt(src string) (string, error) {
 
 // foundLHA returns true if the LHA file type is matched in the magic string.
 func foundLHA(magic string) bool {
-	s := strings.Split(magic, " ")
+	words := strings.Split(magic, " ")
 	const lha, lharc = "lha", "lharc"
-	if s[0] == lharc {
+	if words[0] == lharc {
 		return true
 	}
-	if s[0] != lha {
+	if words[0] != lha {
 		return false
 	}
-	if len(s) < len(lha) {
+	if len(words) < len(lha) {
 		return false
 	}
-	if strings.Join(s[0:3], " ") == "lha archive data" {
+	if strings.Join(words[0:3], " ") == "lha archive data" {
 		return true
 	}
-	if strings.Join(s[2:4], " ") == "archive data" {
+	if strings.Join(words[2:4], " ") == "archive data" {
 		return true
 	}
 	return false
@@ -309,54 +309,6 @@ func (x Extractor) Extract(targets ...string) error {
 	return x.checkSign(sign, targets...)
 }
 
-// checkSign is used to determine the correct extraction method for the source archive.
-//
-// Compressed tarballs signatures are determined by the compression method, not the tarball format.
-// For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
-func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) error {
-	switch sign { //nolint:exhaustive
-	case magicnumber.GzipCompressArchive:
-		return x.Gzip(targets...)
-	case
-		magicnumber.PKWAREZipReduce,
-		magicnumber.PKWAREZipShrink:
-		return x.ZipHW()
-	case
-		magicnumber.Bzip2CompressArchive,
-		magicnumber.MicrosoftCABinet,
-		magicnumber.TapeARchive,
-		magicnumber.XZCompressArchive,
-		magicnumber.ZStandardArchive:
-		return x.Tar(targets...)
-	case
-		magicnumber.PKWAREZip,
-		magicnumber.PKWAREZip64,
-		magicnumber.PKWAREZipImplode:
-		return x.Zips(targets...)
-	case magicnumber.ARChiveSEA:
-		return x.ARC(targets...)
-	case magicnumber.ArchiveRobertJung:
-		return x.ARJ(targets...)
-	case magicnumber.YoshiLHA:
-		return x.LHA(targets...)
-	case magicnumber.RoshalARchive,
-		magicnumber.RoshalARchivev5:
-		return x.Rar(targets...)
-	case magicnumber.X7zCompressArchive:
-		return x.Zip7(targets...)
-	}
-	return x.unknowns(sign)
-}
-
-func (x Extractor) unknowns(sign magicnumber.Signature) error {
-	switch sign { //nolint:exhaustive
-	case magicnumber.Unknown:
-		return fmt.Errorf("%w, %s", ErrNotArchive, sign)
-	default:
-		return fmt.Errorf("%w, %s", ErrNotImplemented, sign)
-	}
-}
-
 // Zips attempts to delegate the extraction of the source archive to the correct
 // zip decompression program on the file archive.
 //
@@ -406,41 +358,89 @@ type Run struct {
 // to the destination directory, uses that as the working directory
 // and extracts the files. The copied source archive is then removed.
 func (x Extractor) Generic(run Run, targets ...string) error {
-	s := run.Program
+	name := run.Program
 	src, dst := x.Source, x.Destination
-	if st, err := os.Stat(dst); err != nil {
+	if inf, err := os.Stat(dst); err != nil {
 		return fmt.Errorf("%w: %s", err, dst)
-	} else if !st.IsDir() {
+	} else if !inf.IsDir() {
 		return fmt.Errorf("%w: %s", ErrPath, dst)
 	}
 
 	prog, err := exec.LookPath(run.Program)
 	if err != nil {
-		return fmt.Errorf("archive %s extract %w", s, err)
+		return fmt.Errorf("archive %s extract %w", name, err)
 	}
 
 	srcInDst := filepath.Join(dst, filepath.Base(src))
 	if _, err := helper.Duplicate(src, srcInDst); err != nil {
-		return fmt.Errorf("archive %s duplicate %w", s, err)
+		return fmt.Errorf("archive %s duplicate %w", name, err)
 	}
 	defer os.Remove(srcInDst)
 
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
 	args := []string{run.Extract, filepath.Base(src)}
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Dir = dst
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
-			return fmt.Errorf("archive %s %w: %s: %q", s,
-				ErrProg, prog, strings.TrimSpace(b.String()))
+		if buf.String() != "" {
+			return fmt.Errorf("archive %s %w: %s: %q", name,
+				ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
-		return fmt.Errorf("archive %s %w: %s", s, err, prog)
+		return fmt.Errorf("archive %s %w: %s", name, err, prog)
 	}
 	return nil
+}
+
+// checkSign is used to determine the correct extraction method for the source archive.
+//
+// Compressed tarballs signatures are determined by the compression method, not the tarball format.
+// For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
+func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) error {
+	switch sign { //nolint:exhaustive
+	case magicnumber.GzipCompressArchive:
+		return x.Gzip(targets...)
+	case
+		magicnumber.PKWAREZipReduce,
+		magicnumber.PKWAREZipShrink:
+		return x.ZipHW()
+	case
+		magicnumber.Bzip2CompressArchive,
+		magicnumber.MicrosoftCABinet,
+		magicnumber.TapeARchive,
+		magicnumber.XZCompressArchive,
+		magicnumber.ZStandardArchive:
+		return x.Tar(targets...)
+	case
+		magicnumber.PKWAREZip,
+		magicnumber.PKWAREZip64,
+		magicnumber.PKWAREZipImplode:
+		return x.Zips(targets...)
+	case magicnumber.ARChiveSEA:
+		return x.ARC(targets...)
+	case magicnumber.ArchiveRobertJung:
+		return x.ARJ(targets...)
+	case magicnumber.YoshiLHA:
+		return x.LHA(targets...)
+	case magicnumber.RoshalARchive,
+		magicnumber.RoshalARchivev5:
+		return x.Rar(targets...)
+	case magicnumber.X7zCompressArchive:
+		return x.Zip7(targets...)
+	}
+	return x.unknowns(sign)
+}
+
+func (x Extractor) unknowns(sign magicnumber.Signature) error {
+	switch sign { //nolint:exhaustive
+	case magicnumber.Unknown:
+		return fmt.Errorf("%w, %s", ErrNotArchive, sign)
+	default:
+		return fmt.Errorf("%w, %s", ErrNotImplemented, sign)
+	}
 }
 
 // ExtractAll extracts all files from the src archive file to the destination directory.
@@ -457,11 +457,11 @@ func ExtractAll(src, dst string) error {
 // The src is the source file to extract.
 func ExtractSource(src, name string) (string, error) {
 	const mb150 = 150 * 1024 * 1024
-	if st, err := os.Stat(src); err != nil {
+	if inf, err := os.Stat(src); err != nil {
 		return "", fmt.Errorf("cannot stat file: %w", err)
-	} else if st.IsDir() {
+	} else if inf.IsDir() {
 		return "", ErrNotArchive
-	} else if st.Size() > mb150 {
+	} else if inf.Size() > mb150 {
 		return "", ErrTooMany
 	}
 	dst, err := helper.MkContent(src)
@@ -507,11 +507,11 @@ func filearchive(src string) bool {
 // List returns the files within an 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
 // This filename extension is used to determine the archive format.
 func List(src, filename string) ([]string, error) {
-	st, err := os.Stat(src)
+	inf, err := os.Stat(src)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("archive list %w: %s", ErrMissing, filepath.Base(src))
 	}
-	if st.IsDir() {
+	if inf.IsDir() {
 		return nil, fmt.Errorf("archive list %w: %s", ErrFile, filepath.Base(src))
 	}
 	path, err := ExtractSource(src, filename)
@@ -542,15 +542,15 @@ func List(src, filename string) ([]string, error) {
 
 // commander uses system archiver and decompression programs to read the src archive file.
 func commander(src, filename string) ([]string, error) {
-	c := Content{
+	cnt := Content{
 		Ext:   "",
 		Files: []string{},
 	}
-	if err := c.Read(src); err != nil {
-		return nil, fmt.Errorf("commander failed with %s (%q): %w", filename, c.Ext, err)
+	if err := cnt.Read(src); err != nil {
+		return nil, fmt.Errorf("commander failed with %s (%q): %w", filename, cnt.Ext, err)
 	}
 	// remove empty entries
-	files := c.Files
+	files := cnt.Files
 	files = slices.DeleteFunc(files, func(s string) bool {
 		return strings.TrimSpace(s) == ""
 	})

@@ -25,11 +25,11 @@ func (c *Content) LHA(src string) error {
 	}
 
 	const list = "-l"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -108,7 +108,7 @@ func (x Extractor) LHA(targets ...string) error {
 	if err != nil {
 		return fmt.Errorf("extract lha %w", err)
 	}
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
 	// example command: lha -eq2w=destdir/ archive *
@@ -132,11 +132,11 @@ func (x Extractor) LHA(targets ...string) error {
 	args = append(args, targets...)
 
 	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
-		if b.String() != "" {
-			return fmt.Errorf("extract lha %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+		if buf.String() != "" {
+			return fmt.Errorf("extract lha %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf("extract lha %w: %s", err, prog)
 	}

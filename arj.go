@@ -32,11 +32,11 @@ func (c *Content) ARJ(src string) error {
 	}
 
 	const verboselist = "l"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, verboselist, newname)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("content arj %w", err)
@@ -100,9 +100,9 @@ func notArj(output []byte) bool {
 // [arj program]: https://arj.sourceforge.net/
 func (x Extractor) ARJ(targets ...string) error {
 	src, dst := x.Source, x.Destination
-	if st, err := os.Stat(dst); err != nil {
+	if inf, err := os.Stat(dst); err != nil {
 		return fmt.Errorf("%w: %s", err, dst)
-	} else if !st.IsDir() {
+	} else if !inf.IsDir() {
 		return fmt.Errorf("%w: %s", ErrPath, dst)
 	}
 	// note: only use arj, as unarj offers limited functionality
@@ -119,7 +119,7 @@ func (x Extractor) ARJ(targets ...string) error {
 		defer os.Remove(name)
 	}
 
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
 	defer cancel()
 	// note: these flags are for arj32 v3.10
@@ -132,11 +132,11 @@ func (x Extractor) ARJ(targets ...string) error {
 	args = append(args, targets...)
 	args = append(args, targetDir+dst)
 	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
+		if buf.String() != "" {
 			return fmt.Errorf("extract arj %w: %s: %q",
-				ErrProg, prog, strings.TrimSpace(b.String()))
+				ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf("extract arj %w: %s", err, prog)
 	}

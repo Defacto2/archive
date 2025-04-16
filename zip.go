@@ -23,15 +23,15 @@ func (c *Content) Zip(src string) error {
 		return fmt.Errorf("content zipinfo %w", err)
 	}
 	const list = "-1"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		// handle broken zips that still contain some valid files
-		if b.String() != "" && len(out) > 0 {
+		if buf.String() != "" && len(out) > 0 {
 			// return files, zipx, nil
 			return nil
 		}
@@ -63,7 +63,7 @@ func (x Extractor) Zip(targets ...string) error {
 	if dst == "" {
 		return ErrDest
 	}
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	// [-options]
@@ -87,10 +87,10 @@ func (x Extractor) Zip(targets ...string) error {
 	args = append(args, targets...)
 	args = append(args, targetDir, dst)
 	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
-			return fmt.Errorf("extract unzip %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+		if buf.String() != "" {
+			return fmt.Errorf("extract unzip %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf("extract unzip %w: %s", err, prog)
 	}

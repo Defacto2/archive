@@ -29,7 +29,7 @@ type TestData struct {
 	cmdVersion string // cmdVersion is the version of the software used to create the archive.
 }
 
-func Tests() []TestData {
+func Tests() []TestData { //nolint:funlen
 	return []TestData{
 		{
 			WantErr:  false,
@@ -41,7 +41,7 @@ func Tests() []TestData {
 			WantErr:  false,
 			Testname: "ARC",
 			Filename: "ARC601.ARC", Ext: ".arc",
-			cmdDos: "ARC.EXE", cmdInfo: "SEA ARC, January 1989", cmdVersion: "6.01",
+			cmdDos: "ARcnt.EXE", cmdInfo: "SEA ARC, January 1989", cmdVersion: "6.01",
 		},
 		{
 			WantErr:  false,
@@ -89,7 +89,7 @@ func Tests() []TestData {
 			WantErr:  false,
 			Testname: "LHA/LZH",
 			Filename: "LH113.LZH", Ext: ".lha",
-			cmdDos: "LHARC.EXE", cmdInfo: "LHarc, May 1990", cmdVersion: "1.13",
+			cmdDos: "LHARcnt.EXE", cmdInfo: "LHarc, May 1990", cmdVersion: "1.13",
 		},
 		{
 			WantErr:  false,
@@ -144,7 +144,7 @@ func Tests() []TestData {
 
 func TestMagicExt(t *testing.T) {
 	t.Parallel()
-	for _, tt := range Tests() {
+	for _, tt := range Tests() { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
@@ -160,7 +160,7 @@ func TestMagicExt(t *testing.T) {
 }
 
 func TestContent_Read(t *testing.T) {
-	for _, tt := range Tests() {
+	for _, tt := range Tests() { //nolint:varnamelen
 		const want = 3
 		t.Run(tt.Testname, func(t *testing.T) {
 			got := archive.Content{Ext: "", Files: []string{}}
@@ -183,7 +183,7 @@ func TestContent_Read(t *testing.T) {
 
 func TestExtractor_Extract(t *testing.T) {
 	t.Parallel()
-	for _, tt := range Tests() {
+	for _, tt := range Tests() { //nolint:varnamelen
 		const want = 3
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
@@ -198,14 +198,14 @@ func TestExtractor_Extract(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			n, err := helper.Count(tmp)
+			cnt, err := helper.Count(tmp)
 			require.NoError(t, err)
 			if tt.Ext == gzx {
-				assert.Equal(t, 1, n)
+				assert.Equal(t, 1, cnt)
 				lookupGzipExtracted(t, tmp)
 				return
 			}
-			assert.Equal(t, want, n)
+			assert.Equal(t, want, cnt)
 		})
 	}
 }
@@ -225,7 +225,7 @@ func lookupGzipExtracted(t *testing.T, tmp string) {
 
 func TestExtractor_ExtractTarget(t *testing.T) {
 	t.Parallel()
-	for _, tt := range Tests() {
+	for _, tt := range Tests() { //nolint:varnamelen
 		const want = 2
 		const target2, target3 = "TESTDAT2.TXT", "TESTDAT3.TXT"
 		t.Run(tt.Testname, func(t *testing.T) {
@@ -240,25 +240,25 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			n, err := helper.Count(tmp)
+			cnt, err := helper.Count(tmp)
 			require.NoError(t, err)
 			if tt.Ext == gzx {
-				assert.Equal(t, 1, n)
+				assert.Equal(t, 1, cnt)
 				return
 			}
 			if strings.Contains(tt.Testname, "Shrink") ||
 				strings.Contains(tt.Testname, "Reduce") {
-				assert.Equal(t, 3, n)
+				assert.Equal(t, 3, cnt)
 				return
 			}
-			assert.Equal(t, want, n)
+			assert.Equal(t, want, cnt)
 		})
 	}
 }
 
 func TestExtractor_Zips(t *testing.T) {
 	t.Parallel()
-	for _, tt := range Tests() {
+	for _, tt := range Tests() { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			if tt.Ext != ".zip" {
@@ -317,33 +317,33 @@ func TestList(t *testing.T) {
 	}
 }
 
-func TestInvalidFormats(t *testing.T) { //nolint:cyclop
+func TestInvalidFormats(t *testing.T) { //nolint:cyclop,funlen
 	t.Parallel()
-	for _, tt := range Tests() {
+	for _, tt := range Tests() { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
-			c := archive.Content{
+			cnt := archive.Content{
 				Ext:   "",
 				Files: []string{},
 			}
 			tmp := t.TempDir()
 			if !strings.EqualFold(tt.Ext, ".7z") {
-				err := c.Zip7(src)
+				err := cnt.Zip7(src)
 				require.Error(t, err, tt.Filename)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Zip7()
 				require.Error(t, err, tt.Filename)
 			}
 			if !strings.EqualFold(tt.Ext, ".arc") {
-				err := c.ARC(src)
+				err := cnt.ARC(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.ARC()
 				require.Error(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".arj") {
-				err := c.ARJ(src)
+				err := cnt.ARJ(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.ARJ()
@@ -351,21 +351,21 @@ func TestInvalidFormats(t *testing.T) { //nolint:cyclop
 			}
 			if !strings.EqualFold(tt.Ext, gzx) &&
 				!strings.EqualFold(tt.Ext, ".tgz") {
-				err := c.Gzip(src)
+				err := cnt.Gzip(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Gzip()
 				require.Error(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".lha") {
-				err := c.LHA(src)
+				err := cnt.LHA(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.LHA()
 				require.Error(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".rar") {
-				err := c.Rar(src)
+				err := cnt.Rar(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Rar()
@@ -373,14 +373,14 @@ func TestInvalidFormats(t *testing.T) { //nolint:cyclop
 			}
 			skipExts := []string{".7z", ".bz2", ".cab", ".lha", ".tar", ".tgz", ".xz", ".zst", ".zip"}
 			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
-				err := c.Tar(src)
+				err := cnt.Tar(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Tar()
 				require.Error(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".zip") {
-				err := c.Zip(src)
+				err := cnt.Zip(src)
 				require.Error(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Zip()
@@ -416,7 +416,7 @@ func TestHardLink(t *testing.T) {
 			"", false,
 		},
 	}
-	for _, tt := range tests {
+	for _, tt := range tests { //nolint:varnamelen
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join(t.TempDir(), tt.src)

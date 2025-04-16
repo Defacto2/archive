@@ -23,11 +23,11 @@ func (c *Content) Tar(src string) error {
 		return fmt.Errorf("content tar %w", err)
 	}
 	const list = "-tf"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("content tar %w", err)
@@ -62,7 +62,7 @@ func (x Extractor) Tar(targets ...string) error {
 	if dst == "" {
 		return ErrDest
 	}
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	// note: BSD tar uses different flags to GNU tar
@@ -83,10 +83,10 @@ func (x Extractor) Tar(targets ...string) error {
 	args = append(args, targetDir, dst)
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
-			return fmt.Errorf("extract tar %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+		if buf.String() != "" {
+			return fmt.Errorf("extract tar %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf("extract tar %w: %s", err, prog)
 	}

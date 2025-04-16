@@ -26,11 +26,11 @@ func (c *Content) Zip7(src string) error {
 		return fmt.Errorf("content 7zip %w", err)
 	}
 	const list = "l"
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("content 7zip %w", err)
@@ -119,7 +119,7 @@ func (x Extractor) Zip7(targets ...string) error {
 		return fmt.Errorf("extract 7z %w: %s", ErrExt, src)
 	}
 
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
 	defer cancel()
 	const (
@@ -132,10 +132,10 @@ func (x Extractor) Zip7(targets ...string) error {
 	args := []string{extract, overwrite, quiet, yes, targetDir + dst, src}
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
-	cmd.Stderr = &b
+	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
-		if b.String() != "" {
-			return fmt.Errorf("extract 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(b.String()))
+		if buf.String() != "" {
+			return fmt.Errorf("extract 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf("extract 7z %w: %s", err, prog)
 	}
