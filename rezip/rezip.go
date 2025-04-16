@@ -6,6 +6,7 @@ import (
 	"archive/zip"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,22 +36,26 @@ func Compress(name, dest string) (int, error) {
 	}
 	defer zipfile.Close()
 
-	zipper := zip.NewWriter(zipfile)
-	defer zipper.Close()
+	deflater := zip.NewWriter(zipfile)
+	defer deflater.Close()
 
-	zipWr, err := zipper.Create(filepath.Base(name))
+	dst, err := deflater.Create(filepath.Base(name))
 	if err != nil {
 		return 0, fmt.Errorf("rezip compress failed to create writer: %w", err)
 	}
-	b, err := os.ReadFile(name)
+	src, err := os.Open(name)
 	if err != nil {
-		return 0, fmt.Errorf("rezip compress failed to read file: %w", err)
+		return 0, fmt.Errorf("rezip compress failed to open file: %w", err)
 	}
-	n, err := zipWr.Write(b)
+	defer src.Close()
+
+	size := 64 * 1024
+	buf := make([]byte, size)
+	n, err := io.CopyBuffer(dst, src, buf)
 	if err != nil {
-		return 0, fmt.Errorf("rezip compress failed to write bytes: %w", err)
+		return 0, fmt.Errorf("rezip compress failed to copy file: %w", err)
 	}
-	return n, nil
+	return int(n), nil
 }
 
 // CompressDir compresses the named root directory into the dest zip file
@@ -66,8 +71,8 @@ func CompressDir(root, dest string) (int64, error) {
 	}
 	defer zipfile.Close()
 
-	zipper := zip.NewWriter(zipfile)
-	defer zipper.Close()
+	deflater := zip.NewWriter(zipfile)
+	defer deflater.Close()
 
 	var written int64
 	addFile := func(path string, info os.FileInfo, err error) error {
@@ -84,19 +89,23 @@ func CompressDir(root, dest string) (int64, error) {
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
-		zipWr, err := zipper.Create(rel)
+		dst, err := deflater.Create(rel)
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
-		b, err := os.ReadFile(path)
+		src, err := os.Open(path)
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
-		n, err := zipWr.Write(b)
+		defer src.Close()
+
+		const size = 64 * 1024
+		buf := make([]byte, size)
+		n, err := io.CopyBuffer(dst, src, buf)
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
-		written += int64(n)
+		written += n
 		return nil
 	}
 
