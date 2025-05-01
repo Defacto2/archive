@@ -1,7 +1,7 @@
 github.com/Defacto2/helper v1.4.1 h1:IzB9LSe8wHQ3mclnS0rsP7vRXkgP1d12rTwuy+UywcA=
 github.com/Defacto2/helper v1.4.1/go.mod h1:ejcxlk9MTAI3qgD8LsFO0fjkxoUjPNdTEIiEoEj26hs=
-github.com/Defacto2/magicnumber v1.0.7 h1:dTM+1jgclLOyGXzfeygaTIA16k9cL51xgT4srn5u1ZA=
-github.com/Defacto2/magicnumber v1.0.7/go.mod h1:XORQ8Qvz5HwKOFWJI9cYQYIlaED1OYd/HPTI41gs8m0=
+github.com/Defacto2/magicnumber v1.0.8 h1:fIdT5SpyyItERrAsoGfZ8mTWALugPj4Cj30MiHgq75M=
+github.com/Defacto2/magicnumber v1.0.8/go.mod h1:NY7t+7E4Yc3V2CpvEV2CR/EVA+sCUpt2ofY0n2/TkuA=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
