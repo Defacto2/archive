@@ -4,7 +4,7 @@ go 1.24.1
 
 require (
 	github.com/Defacto2/helper v1.4.1
-	github.com/Defacto2/magicnumber v1.0.7
+	github.com/Defacto2/magicnumber v1.0.8
 	github.com/stretchr/testify v1.10.0
 )
 
