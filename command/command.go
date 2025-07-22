@@ -1,8 +1,11 @@
+// Package command lists the known archiving and decompression application names.
 package command
 
-// A note about unrar on linux, the installation cannot use the unrar-free package,
-// which is a poor substitute for the files this application needs to handle.
-// The unrar binary should return:
+// A note about unrar: On Linux there are incompatible variants of unrar.
+// This package cannot use the common unrar-free application. It unfortunately, is
+// incomplete and is incompatible with many .rar files this package needs to handle.
+//
+// When used on Linux, the unrar application should provide the following copyright:
 // "UNRAR 6.24 freeware, Copyright (c) 1993-2023 Alexander Roshal".
 
 const (

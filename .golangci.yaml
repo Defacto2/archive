@@ -6,6 +6,7 @@ linters:
     - nlreturn
     - paralleltest
     - wsl
+    - wsl_v5
   settings:
     misspell:
       locale: US
