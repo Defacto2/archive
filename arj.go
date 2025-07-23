@@ -33,7 +33,7 @@ func (c *Content) ARJ(src string) error {
 
 	const verboselist = "l"
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, verboselist, newname)
 	cmd.Stderr = &buf
@@ -120,7 +120,7 @@ func (x Extractor) ARJ(targets ...string) error {
 	}
 
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
 	defer cancel()
 	// note: these flags are for arj32 v3.10
 	const (

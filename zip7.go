@@ -27,7 +27,7 @@ func (c *Content) Zip7(src string) error {
 	}
 	const list = "l"
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
 	cmd.Stderr = &buf
@@ -120,7 +120,7 @@ func (x Extractor) Zip7(targets ...string) error {
 	}
 
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
 	defer cancel()
 	const (
 		extract   = "x"    // x extract files without paths

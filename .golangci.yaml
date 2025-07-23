@@ -4,6 +4,7 @@ linters:
   disable:
     - depguard
     - nlreturn
+    - noinlineerr
     - paralleltest
     - wsl
     - wsl_v5

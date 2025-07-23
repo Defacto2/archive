@@ -4,6 +4,7 @@ package rezip
 
 import (
 	"archive/zip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -49,7 +50,7 @@ func Compress(name, dest string) (int, error) {
 	}
 	defer src.Close()
 
-	size := 64 * 1024
+	const size = 64 * 1024
 	buf := make([]byte, size)
 	n, err := io.CopyBuffer(dst, src, buf)
 	if err != nil {
@@ -134,7 +135,9 @@ func Test(name string) error {
 	if inf.Size() == 0 {
 		return fmt.Errorf("%w: %s is empty", ErrTest, name)
 	}
-	err = exec.Command(path, testArg, name).Run()
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	defer cancel()
+	err = exec.CommandContext(ctx, path, testArg, name).Run()
 	if err != nil {
 		diag := pkzip.ExitStatus(err)
 		switch diag { //nolint:exhaustive

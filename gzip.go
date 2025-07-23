@@ -25,7 +25,7 @@ func (c *Content) Gzip(src string) error {
 	}
 	const test = "-t"
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, test, src)
 	cmd.Stderr = &buf
@@ -187,7 +187,7 @@ func (x Extractor) gzip() (method, error) {
 	}
 
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
 	defer cancel()
 	const (
 		decompress = "--decompress" // -d decompress

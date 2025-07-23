@@ -20,7 +20,7 @@ import (
 	"strings"
 )
 
-var ErrPassParse = errors.New("zip archive uses a passparse")
+var ErrPassParse = errors.New("zip archive uses a pass-parse")
 
 // Compression is the PKZip compression method used by a ZIP archive file.
 type Compression uint16
@@ -137,7 +137,7 @@ func (d Diagnostic) String() string {
 		Unused:            "Unused",
 		ZipNotFound:       "Zip file not found",
 		OptionsError:      "Invalid command line options",
-		FilesNoFound:      "Zipfiles not found",
+		FilesNoFound:      "Zip files not found",
 		ZipBomb:           "Zip bomb detected",
 		DiskFull:          "Disk full",
 		PrematureExit:     "Unexpected premature exit",

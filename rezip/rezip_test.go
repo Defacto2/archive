@@ -7,8 +7,7 @@ import (
 	"testing"
 
 	"github.com/Defacto2/archive/rezip"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/nalgeon/be"
 )
 
 func td(name string) string {
@@ -25,58 +24,49 @@ func TestCompress(t *testing.T) {
 	tmp := t.TempDir()
 	src := td("TEST.EXE")
 	dest := filepath.Join(tmp, "zip_test.zip")
-
 	inf, err := os.Stat(src)
-	require.NoError(t, err)
-
+	be.Err(t, err, nil)
 	size, err := rezip.Compress(src, dest)
-	require.NoError(t, err)
-
-	assert.Equal(t, int64(size), inf.Size())
-
+	be.Err(t, err, nil)
+	be.Equal(t, int64(size), inf.Size())
 	// confirm the zip file is smaller than the total size of the files
 	inf, err = os.Stat(dest)
-	require.NoError(t, err)
-	assert.Less(t, inf.Size(), int64(size))
-
+	be.Err(t, err, nil)
+	less := inf.Size() < int64(size)
+	be.True(t, less)
 	// confirm command fails when the file already exists
 	size, err = rezip.Compress(src, dest)
-	require.Error(t, err)
-	require.Zero(t, size)
-
+	be.Err(t, err)
+	be.Equal(t, size, 0)
 	// confirm command fails when the dest is a directory
 	size, err = rezip.Compress(src, tmp)
-	require.Error(t, err)
-	require.Zero(t, size)
+	be.Err(t, err)
+	be.Equal(t, size, 0)
 }
 
 func TestCompressDir(t *testing.T) {
 	t.Parallel()
-
 	tmp := t.TempDir()
 	srcDir := td("")
 	dest := filepath.Join(tmp, "unzip_test.zip")
-
 	size, err := rezip.CompressDir(srcDir, dest)
-	require.NoError(t, err)
-
+	be.Err(t, err, nil)
 	const fourMB = 4 * 1024 * 1024
-	assert.Greater(t, size, int64(fourMB))
-
+	greater := size > int64(fourMB)
+	be.True(t, greater)
 	// confirm the zip file is smaller than the total size of the files
 	inf, err := os.Stat(dest)
-	require.NoError(t, err)
-	assert.Less(t, inf.Size(), size)
+	be.Err(t, err, nil)
+	less := inf.Size() < size
+	be.True(t, less)
 }
 
 func TestUnzip(t *testing.T) {
 	t.Parallel()
-
 	src := td("PKZ80A1.ZIP")
 	err := rezip.Test(src)
-	require.NoError(t, err)
-
+	be.Err(t, err, nil)
 	src = td("ARJ310.ARJ")
 	err = rezip.Test(src)
-	require.Error(t, err)
+	be.Err(t, err)
 }

@@ -26,7 +26,7 @@ func (c *Content) LHA(src string) error {
 
 	const list = "-l"
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
 	cmd.Stderr = &buf
@@ -109,7 +109,7 @@ func (x Extractor) LHA(targets ...string) error {
 		return fmt.Errorf("extract lha %w", err)
 	}
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
 	defer cancel()
 	// example command: lha -eq2w=destdir/ archive *
 	const (

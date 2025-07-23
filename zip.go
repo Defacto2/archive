@@ -24,7 +24,7 @@ func (c *Content) Zip(src string) error {
 	}
 	const list = "-1"
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
 	cmd.Stderr = &buf
@@ -64,7 +64,7 @@ func (x Extractor) Zip(targets ...string) error {
 		return ErrDest
 	}
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
 	defer cancel()
 	// [-options]
 	const (

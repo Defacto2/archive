@@ -1,6 +1,8 @@
 // Package command lists the known archiving and decompression application names.
 package command
 
+import "time"
+
 // A note about unrar: On Linux there are incompatible variants of unrar.
 // This package cannot use the common unrar-free application. It unfortunately, is
 // incomplete and is incompatible with many .rar files this package needs to handle.
@@ -21,4 +23,10 @@ const (
 	Unzip   = "unzip"   // Unzip is the zip decompression command.
 	Zip7    = "7zz"     // Zip7 is the 7-Zip decompression command.
 	ZipInfo = "zipinfo" // ZipInfo is the zip information command.
+)
+
+const (
+	TimeoutList    = 2 * time.Second  // TimeoutList value in seconds for the command running in a background context.
+	TimeoutDefunct = 5 * time.Second  // TimeoutDefunct is the maximum time allowed for the defunct file extraction.
+	TimeoutExtract = 15 * time.Second // TimeoutExtract is the maximum time allowed for the archive extraction.
 )

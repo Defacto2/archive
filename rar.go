@@ -31,7 +31,7 @@ func (c *Content) Rar(src string) error {
 		noComments = "-c-"
 	)
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutLookup)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, listBrief, "-ep", noComments, src)
 	cmd.Stderr = &buf
@@ -69,7 +69,7 @@ func (x Extractor) Rar(targets ...string) error {
 		return ErrDest
 	}
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
 	defer cancel()
 	const (
 		eXtract    = "x"   // x extract files with full path

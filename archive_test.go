@@ -10,8 +10,7 @@ import (
 
 	"github.com/Defacto2/archive"
 	"github.com/Defacto2/helper"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/nalgeon/be"
 )
 
 const (
@@ -150,10 +149,10 @@ func TestMagicExt(t *testing.T) {
 			src := filepath.Join("testdata", tt.Filename)
 			got, err := archive.MagicExt(src)
 			if tt.WantErr {
-				require.Error(t, err)
+				be.Err(t, err)
 			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.Ext, got)
+				be.Err(t, err, nil)
+				be.Equal(t, tt.Ext, got)
 			}
 		})
 	}
@@ -167,16 +166,16 @@ func TestContent_Read(t *testing.T) {
 			src := filepath.Join("testdata", tt.Filename)
 			err := got.Read(src)
 			if tt.WantErr {
-				require.Error(t, err)
+				be.Err(t, err)
 				return
 			}
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			n := len(got.Files)
 			if tt.Ext == gzx {
-				assert.Equal(t, 1, n)
+				be.Equal(t, 1, n)
 				return
 			}
-			assert.Equal(t, want, n)
+			be.Equal(t, want, n)
 		})
 	}
 }
@@ -194,18 +193,18 @@ func TestExtractor_Extract(t *testing.T) {
 			}.Extract()
 			if tt.WantErr {
 				fmt.Fprintln(os.Stderr, err)
-				require.Error(t, err)
+				be.Err(t, err)
 				return
 			}
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			cnt, err := helper.Count(tmp)
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			if tt.Ext == gzx {
-				assert.Equal(t, 1, cnt)
+				be.Equal(t, 1, cnt)
 				lookupGzipExtracted(t, tmp)
 				return
 			}
-			assert.Equal(t, want, cnt)
+			be.Equal(t, want, cnt)
 		})
 	}
 }
@@ -213,14 +212,14 @@ func TestExtractor_Extract(t *testing.T) {
 func lookupGzipExtracted(t *testing.T, tmp string) {
 	t.Helper()
 	items, err := os.ReadDir(tmp)
-	require.NoError(t, err)
-	assert.Len(t, items, 1)
-	assert.Equal(t, "TESTDAT3.TXT", items[0].Name())
+	be.Err(t, err, nil)
+	be.Equal(t, len(items), 1)
+	be.Equal(t, "TESTDAT3.TXT", items[0].Name())
 	info, err := items[0].Info()
-	require.NoError(t, err)
-	assert.False(t, info.IsDir())
-	assert.Equal(t, int64(81410), info.Size())
-	require.NoError(t, err)
+	be.Err(t, err, nil)
+	be.True(t, !info.IsDir())
+	be.Equal(t, int64(81410), info.Size())
+	be.Err(t, err, nil)
 }
 
 func TestExtractor_ExtractTarget(t *testing.T) {
@@ -236,22 +235,22 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 				Destination: tmp,
 			}.Extract(target2, target3)
 			if tt.WantErr {
-				require.Error(t, err)
+				be.Err(t, err)
 				return
 			}
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			cnt, err := helper.Count(tmp)
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			if tt.Ext == gzx {
-				assert.Equal(t, 1, cnt)
+				be.Equal(t, 1, cnt)
 				return
 			}
 			if strings.Contains(tt.Testname, "Shrink") ||
 				strings.Contains(tt.Testname, "Reduce") {
-				assert.Equal(t, 3, cnt)
+				be.Equal(t, 3, cnt)
 				return
 			}
-			assert.Equal(t, want, cnt)
+			be.Equal(t, want, cnt)
 		})
 	}
 }
@@ -269,16 +268,16 @@ func TestExtractor_Zips(t *testing.T) {
 				Source:      filepath.Join("testdata", tt.Filename),
 				Destination: tmp,
 			}.Zips()
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			err = archive.Extractor{
 				Source:      filepath.Join("testdata", tt.Filename),
 				Destination: tmp,
 			}.Zips("TESTDAT2.TXT", "TESTDAT3.TXT")
 			switch tt.Testname {
 			case "Reduce ZIP":
-				require.Error(t, err)
+				be.Err(t, err)
 			default:
-				require.NoError(t, err)
+				be.Err(t, err, nil)
 			}
 		})
 	}
@@ -290,12 +289,12 @@ func TestExtractSource(t *testing.T) {
 			src := filepath.Join("testdata", tt.Filename)
 			got, err := archive.ExtractSource(src, "tester")
 			if tt.WantErr && tt.Ext != ".txt" {
-				require.Error(t, err, tt.Filename)
+				be.Err(t, err)
 				return
 			}
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			_, err = os.Stat(got)
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 		})
 	}
 }
@@ -308,11 +307,12 @@ func TestList(t *testing.T) {
 			src := filepath.Join("testdata", tt.Filename)
 			got, err := archive.List(src, tt.Filename)
 			if tt.WantErr && tt.Ext != ".txt" {
-				require.Error(t, err)
+				be.Err(t, err)
 				return
 			}
-			require.NoError(t, err)
-			assert.NotEmpty(t, got)
+			be.Err(t, err, nil)
+			notEmpty := len(got) > 0
+			be.True(t, notEmpty)
 		})
 	}
 }
@@ -330,61 +330,61 @@ func TestInvalidFormats(t *testing.T) { //nolint:cyclop,funlen
 			tmp := t.TempDir()
 			if !strings.EqualFold(tt.Ext, ".7z") {
 				err := cnt.Zip7(src)
-				require.Error(t, err, tt.Filename)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Zip7()
-				require.Error(t, err, tt.Filename)
+				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".arc") {
 				err := cnt.ARC(src)
-				require.Error(t, err)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.ARC()
-				require.Error(t, err)
+				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".arj") {
 				err := cnt.ARJ(src)
-				require.Error(t, err)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.ARJ()
-				require.Error(t, err)
+				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, gzx) &&
 				!strings.EqualFold(tt.Ext, ".tgz") {
 				err := cnt.Gzip(src)
-				require.Error(t, err)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Gzip()
-				require.Error(t, err)
+				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".lha") {
 				err := cnt.LHA(src)
-				require.Error(t, err)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.LHA()
-				require.Error(t, err)
+				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".rar") {
 				err := cnt.Rar(src)
-				require.Error(t, err)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Rar()
-				require.Error(t, err)
+				be.Err(t, err)
 			}
 			skipExts := []string{".7z", ".bz2", ".cab", ".lha", ".tar", ".tgz", ".xz", ".zst", ".zip"}
 			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
 				err := cnt.Tar(src)
-				require.Error(t, err)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Tar()
-				require.Error(t, err)
+				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".zip") {
 				err := cnt.Zip(src)
-				require.Error(t, err)
+				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
 				err = x.Zip()
-				require.Error(t, err)
+				be.Err(t, err)
 			}
 		})
 	}
@@ -421,19 +421,18 @@ func TestHardLink(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join(t.TempDir(), tt.src)
 			err := helper.Touch(src)
-			require.NoError(t, err)
-
+			be.Err(t, err, nil)
 			got, err := archive.HardLink(tt.require, src)
 			if tt.wantErr {
-				require.Error(t, err)
+				be.Err(t, err)
 				return
 			}
-			require.NoError(t, err)
+			be.Err(t, err, nil)
 			if tt.want == "" {
-				assert.Empty(t, got)
+				be.Equal(t, got, "")
 				return
 			}
-			assert.True(t, strings.HasSuffix(got, tt.want))
+			be.True(t, strings.HasSuffix(got, tt.want))
 		})
 	}
 }
@@ -462,7 +461,7 @@ func TestGzipName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := archive.GzipName(tt.src)
-			assert.Equal(t, tt.want, got)
+			be.Equal(t, got, tt.want)
 		})
 	}
 }

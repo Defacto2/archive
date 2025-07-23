@@ -1,6 +1,7 @@
 package pkzip_test
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -9,8 +10,7 @@ import (
 
 	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/archive/pkzip"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/nalgeon/be"
 )
 
 func td(name string) string {
@@ -24,56 +24,46 @@ func td(name string) string {
 
 func TestPkzip(t *testing.T) {
 	t.Parallel()
-
 	comps, err := pkzip.Methods(td("PKZ204EX.TXT"))
-	require.Error(t, err)
-	assert.Nil(t, comps)
-
+	be.Err(t, err)
+	be.Equal(t, comps, nil)
 	comps, err = pkzip.Methods(td("PKZ204EX.ZIP"))
-	require.NoError(t, err)
-	assert.Equal(t, pkzip.Deflated, comps[1])
-	assert.Equal(t, pkzip.Stored, comps[0])
-
+	be.Err(t, err, nil)
+	be.Equal(t, pkzip.Deflated, comps[1])
+	be.Equal(t, pkzip.Stored, comps[0])
 	comps, err = pkzip.Methods(td("PKZ80A1.ZIP"))
-	require.NoError(t, err)
-	assert.Equal(t, pkzip.Shrunk, comps[1])
-	assert.Equal(t, pkzip.Stored, comps[0])
-
+	be.Err(t, err, nil)
+	be.Equal(t, pkzip.Shrunk, comps[1])
+	be.Equal(t, pkzip.Stored, comps[0])
 	comps, err = pkzip.Methods(td("PKZ80A1.ZIP"))
-	require.NoError(t, err)
-	assert.Equal(t, pkzip.Shrunk.String(), comps[1].String())
-	assert.Equal(t, pkzip.Stored.String(), comps[0].String())
-
+	be.Err(t, err, nil)
+	be.Equal(t, pkzip.Shrunk.String(), comps[1].String())
+	be.Equal(t, pkzip.Stored.String(), comps[0].String())
 	comps, err = pkzip.Methods(td("PKZ110EI.ZIP"))
-	require.NoError(t, err)
-	assert.Equal(t, "[Stored Imploded]", fmt.Sprint(comps))
-	assert.False(t, comps[1].Zip())
-
+	be.Err(t, err, nil)
+	be.Equal(t, "[Stored Imploded]", fmt.Sprint(comps))
+	be.True(t, !comps[1].Zip())
 	usable, err := pkzip.Zip(td("PKZ204EX.TXT"))
-	require.Error(t, err)
-	assert.False(t, usable)
-
+	be.Err(t, err)
+	be.True(t, !usable)
 	usable, err = pkzip.Zip(td("PKZ204EX.ZIP"))
-	require.NoError(t, err)
-	assert.True(t, usable)
-
+	be.Err(t, err, nil)
+	be.True(t, usable)
 	usable, err = pkzip.Zip(td("PKZ80A1.ZIP"))
-	require.NoError(t, err)
-	assert.False(t, usable)
-
+	be.Err(t, err, nil)
+	be.True(t, !usable)
 	const invalid = 999
 	comp := pkzip.Compression(invalid)
-	assert.Equal(t, "Reserved", comp.String())
+	be.Equal(t, "Reserved", comp.String())
 }
 
 func TestExitStatus(t *testing.T) {
 	t.Parallel()
 	app, err := exec.LookPath(command.Unzip)
-	require.NoError(t, err)
-
-	err = exec.Command(app, "-T", "archive.zip").Run()
-	require.Error(t, err)
+	be.Err(t, err, nil)
+	err = exec.CommandContext(context.Background(), app, "-T", "archive.zip").Run()
+	be.Err(t, err)
 	diag := pkzip.ExitStatus(err)
-	assert.Equal(t, pkzip.ZipNotFound, diag)
-	assert.Equal(t, "Zip file not found", diag.String())
+	be.Equal(t, pkzip.ZipNotFound, diag)
+	be.Equal(t, "Zip file not found", diag.String())
 }

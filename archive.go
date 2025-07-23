@@ -43,18 +43,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
+	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/archive/pkzip"
 	"github.com/Defacto2/helper"
 	"github.com/Defacto2/magicnumber"
 )
 
 const (
-	TimeoutExtract = 15 * time.Second // TimeoutExtract is the maximum time allowed for the archive extraction.
-	TimeoutDefunct = 5 * time.Second  // TimeoutDefunct is the maximum time allowed for the defunct file extraction.
-	TimeoutLookup  = 2 * time.Second  // TimeoutLookup is the maximum time allowed for the program list content.
-
 	// WriteWriteRead is the file mode for read and write access.
 	// The file owner and group has read and write access, and others have read access.
 	WriteWriteRead fs.FileMode = 0o664
@@ -105,7 +101,7 @@ func MagicExt(src string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("archive magic file lookup %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutExtract)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, "--brief", src)
 	out, err := cmd.Output()
@@ -378,7 +374,7 @@ func (x Extractor) Generic(run Run, targets ...string) error {
 	defer os.Remove(srcInDst)
 
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), TimeoutDefunct)
+	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
 	defer cancel()
 	args := []string{run.Extract, filepath.Base(src)}
 	args = append(args, targets...)
