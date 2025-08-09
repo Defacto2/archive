@@ -65,7 +65,11 @@ func (c *Content) readname(src string) {
 func GzipName(src string) string {
 	base := filepath.Base(src)
 	s := strings.Split(base, ".")
-	name := strings.Join(s[:len(s)-1], ".")
+	pos := len(s) - 1
+	if len(s) < pos {
+		return base
+	}
+	name := strings.Join(s[:pos], ".")
 	return name
 }
 

@@ -126,6 +126,9 @@ func MagicExt(src string) (string, error) {
 		"zstandard compressed data (v0.8+)": zstdx,
 	}
 	result := strings.Split(strings.ToLower(string(out)), ",")
+	if len(result) < 1 {
+		return "", nil
+	}
 	magic := strings.TrimSpace(result[0])
 	if foundLHA(magic) {
 		return lhax, nil
@@ -144,6 +147,9 @@ func MagicExt(src string) (string, error) {
 // foundLHA returns true if the LHA file type is matched in the magic string.
 func foundLHA(magic string) bool {
 	words := strings.Split(magic, " ")
+	if len(words) < 1 {
+		return false
+	}
 	const lha, lharc = "lha", "lharc"
 	if words[0] == lharc {
 		return true
@@ -506,6 +512,9 @@ func List(src, filename string) ([]string, error) {
 	inf, err := os.Stat(src)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("archive list %w: %s", ErrMissing, filepath.Base(src))
+	}
+	if inf == nil {
+		return nil, nil
 	}
 	if inf.IsDir() {
 		return nil, fmt.Errorf("archive list %w: %s", ErrFile, filepath.Base(src))
