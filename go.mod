@@ -4,7 +4,7 @@ go 1.25.1
 
 require (
 	github.com/Defacto2/helper v1.6.2
-	github.com/Defacto2/magicnumber v1.0.12
+	github.com/Defacto2/magicnumber v1.0.13
 	github.com/nalgeon/be v0.3.0
 )
 
