@@ -457,6 +457,14 @@ func ExtractAll(src, dst string) error {
 // ExtractSource extracts the source file into a temporary directory.
 // The named file is used as part of the extracted directory path.
 // The src is the source file to extract.
+//
+// To act as a pseudo cache, if the temporary directory already exists
+// and it contains two or more items, then nothing will done and it
+// is assumed the src file has already been extracted.
+// This behavor can be overwritten by using [os.RemoveAll] after
+// using the func.
+//
+// The absolute path of the extracted archive is returned.
 func ExtractSource(src, name string) (string, error) {
 	const mb150 = 150 * 1024 * 1024
 	if inf, err := os.Stat(src); err != nil {
@@ -470,9 +478,21 @@ func ExtractSource(src, name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot create content directory: %w", err)
 	}
-	entries, _ := os.ReadDir(dst)
+	// NOTE: os.ReadDir doesn't behave correctly with archives that
+	// contain a single directory in the root, so use a custom walker.
+	entries := 0
+	walkerCount := func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fs.SkipDir
+		}
+		if !d.IsDir() {
+			entries++
+		}
+		return nil
+	}
+	_ = filepath.WalkDir(dst, walkerCount)
 	const extracted = 2
-	if len(entries) >= extracted {
+	if entries >= extracted {
 		return dst, nil
 	}
 	switch filearchive(src) {
