@@ -1,5 +1,5 @@
-github.com/Defacto2/helper v1.6.4 h1:PUT8RGFw3lVRBYBA+h3UeFvZfq6B59K7Mjp2/tFDHBM=
-github.com/Defacto2/helper v1.6.4/go.mod h1:wNS/xm0JEPK1TWlwB9gMTCTZKvcXKxVRaX8dS3v4WM4=
+github.com/Defacto2/helper v1.6.5 h1:Iq9V5S+oltemTzdAPudfyhEJfrWj/p6JNXLdrUyWClo=
+github.com/Defacto2/helper v1.6.5/go.mod h1:5vFt3fA2xO3fP7UlYq8c8pCGWIlTmAosV64GE7ROJC0=
 github.com/Defacto2/magicnumber v1.2.1 h1:G3RUixxKdfVt6iyH6HcbOzgUs9ytPnWtHLhF4CwPSQY=
 github.com/Defacto2/magicnumber v1.2.1/go.mod h1:I4UNqXk5kDUeXaXpUAn4R67bKP2bxTY8FuarLov2z8w=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -26,6 +26,8 @@ golang.org/x/mod v0.29.0 h1:HV8lRxZC4l2cr3Zq1LvtOsi/ThTgWnUk/y64QSs8GwA=
 golang.org/x/mod v0.29.0/go.mod h1:NyhrlYXJ2H4eJiRy/WDBO6HMqZQ6q9nk4JzS3NuCK+w=
 golang.org/x/sync v0.18.0 h1:kr88TuHDroi+UVf+0hZnirlk8o8T+4MrK6mr60WkH/I=
 golang.org/x/sync v0.18.0/go.mod h1:9KTHXmSnoGruLpwFjVSX0lNNA75CykiMECbovNTZqGI=
+golang.org/x/sys v0.37.0 h1:fdNQudmxPjkdUTPnLn5mdQv7Zwvbvpaxqs831goi9kQ=
+golang.org/x/sys v0.37.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
 golang.org/x/text v0.31.0 h1:aC8ghyu4JhP8VojJ2lEHBnochRno1sgL6nEi9WGFGMM=
 golang.org/x/text v0.31.0/go.mod h1:tKRAlv61yKIjGGHX/4tP1LTbc13YSec1pxVEWXzfoeM=
 golang.org/x/tools v0.38.0 h1:Hx2Xv8hISq8Lm16jvBZ2VQf+RLmbd7wVUsALibYI/IQ=
