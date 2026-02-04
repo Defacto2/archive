@@ -64,13 +64,10 @@ func (c *Content) readname(src string) {
 // For example, if the base filename is `example.txt.gz`, the uncompressed filename is `example.txt`.
 func GzipName(src string) string {
 	base := filepath.Base(src)
-	s := strings.Split(base, ".")
-	pos := len(s) - 1
-	if len(s) < pos {
-		return base
+	if i := strings.LastIndex(base, "."); i > 0 {
+		return base[:i]
 	}
-	name := strings.Join(s[:pos], ".")
-	return name
+	return base
 }
 
 // readTarball extracts and reads the gzip compressed tarball archive.
@@ -97,7 +94,7 @@ func (c *Content) readTarball(src string) error {
 		return fmt.Errorf("read tarball %w", err)
 	}
 	if inf.IsDir() {
-		return fmt.Errorf("read tarball %w", err)
+		return fmt.Errorf("read tarball %w", ErrFile)
 	}
 	ext, err := MagicExt(name)
 	if err != nil {
@@ -125,7 +122,7 @@ func (x Extractor) Gzip(targets ...string) error {
 		return err
 	}
 	if m.magic == tgzx {
-		xtb, err := opentarball(m.name)
+		xtb, err := opentarball(m.name, x.Destination)
 		if err != nil {
 			return err
 		}
@@ -135,7 +132,7 @@ func (x Extractor) Gzip(targets ...string) error {
 }
 
 // opentarball extracts the tarball archive from the gzip compressed file.
-func opentarball(name string) (Extractor, error) {
+func opentarball(name string, dest string) (Extractor, error) {
 	empty := Extractor{Source: "", Destination: ""}
 	dir := filepath.Dir(name)
 	tarball := filepath.Join(dir, GzipName(name))
@@ -143,10 +140,14 @@ func opentarball(name string) (Extractor, error) {
 	if err != nil {
 		return empty, fmt.Errorf("open tarball %w", err)
 	}
-	if magic, _ := MagicExt(tarball); magic != tarx {
+	magic, err := MagicExt(tarball)
+	if err != nil {
+		return empty, fmt.Errorf("open tarball %w", err)
+	}
+	if magic != tarx {
 		return empty, nil
 	}
-	return Extractor{Source: tarball, Destination: dir}, nil
+	return Extractor{Source: tarball, Destination: dest}, nil
 }
 
 type method struct {
@@ -160,7 +161,7 @@ func (x Extractor) tarball(targets ...string) error {
 		return err
 	}
 	if m.magic == tgzx {
-		xtb, err := opentarball(m.name)
+		xtb, err := opentarball(m.name, x.Destination)
 		if err != nil {
 			return err
 		}

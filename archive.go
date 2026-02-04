@@ -126,9 +126,6 @@ func MagicExt(src string) (string, error) {
 		"zstandard compressed data (v0.8+)": zstdx,
 	}
 	result := strings.Split(strings.ToLower(string(out)), ",")
-	if len(result) < 1 {
-		return "", nil
-	}
 	magic := strings.TrimSpace(result[0])
 	if foundLHA(magic) {
 		return lhax, nil
@@ -136,8 +133,8 @@ func MagicExt(src string) (string, error) {
 	if foundTGZ(magic, src) {
 		return tgzx, nil
 	}
-	for magic, ext := range magics {
-		if strings.TrimSpace(result[0]) == magic {
+	for pattern, ext := range magics {
+		if magic == pattern {
 			return ext, nil
 		}
 	}
@@ -157,7 +154,7 @@ func foundLHA(magic string) bool {
 	if words[0] != lha {
 		return false
 	}
-	if len(words) < len(lha) {
+	if len(words) < 4 {
 		return false
 	}
 	if strings.Join(words[0:3], " ") == "lha archive data" {

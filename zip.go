@@ -32,7 +32,11 @@ func (c *Content) Zip(src string) error {
 	if err != nil {
 		// handle broken zips that still contain some valid files
 		if buf.String() != "" && len(out) > 0 {
-			// return files, zipx, nil
+			c.Files = strings.Split(string(out), "\n")
+			c.Files = slices.DeleteFunc(c.Files, func(s string) bool {
+				return strings.TrimSpace(s) == ""
+			})
+			c.Ext = zipx
 			return nil
 		}
 		// otherwise the zipinfo threw an error
