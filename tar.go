@@ -67,20 +67,21 @@ func (x Extractor) Tar(targets ...string) error {
 	defer cancel()
 	// note: BSD tar uses different flags to GNU tar
 	const (
-		extract   = "-x"                    // -x extract files
-		source    = "--file"                // -f file path to extract
-		targetDir = "--cd"                  // -C target directory
-		noAcls    = "--no-acls"             // --no-acls
-		noFlags   = "--no-fflags"           // --no-fflags
-		noModTime = "--modification-time"   // --modification-time
-		noSafeW   = "--no-safe-writes"      // --no-safe-writes
-		noOwner   = "--no-same-owner"       // --no-same-owner
-		noPerms   = "--no-same-permissions" // --no-same-permissions
-		noXattrs  = "--no-xattrs"           // --no-xattrs
+		extract     = "-x"                    // -x extract files
+		source      = "--file"                // -f file path to extract
+		targetDir   = "--cd"                  // -C target directory
+		noAcls      = "--no-acls"             // --no-acls
+		noFlags     = "--no-fflags"           // --no-fflags
+		noModTime   = "--modification-time"   // --modification-time
+		noSafeW     = "--no-safe-writes"      // --no-safe-writes
+		noOwner     = "--no-same-owner"       // --no-same-owner
+		noPerms     = "--no-same-permissions" // --no-same-permissions
+		noXattrs    = "--no-xattrs"           // --no-xattrs
+		tarArgsBase = 12                      // base args before targets
 	)
-	args := []string{extract, source, src}
-	args = append(args, noAcls, noFlags, noSafeW, noModTime, noOwner, noPerms, noXattrs)
-	args = append(args, targetDir, dst)
+	args := make([]string, 0, tarArgsBase+len(targets))
+	args = append(args, extract, source, src, noAcls, noFlags, noSafeW, noModTime,
+		noOwner, noPerms, noXattrs, targetDir, dst)
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Stderr = &buf

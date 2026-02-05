@@ -124,11 +124,16 @@ func (x Extractor) ARJ(targets ...string) error {
 	defer cancel()
 	// note: these flags are for arj32 v3.10
 	const (
-		extract   = "x"   // x extract files
-		yes       = "-y"  // -y assume yes to all queries
-		targetDir = "-ht" // -ht target directory
+		extract      = "x"   // x extract files
+		yes          = "-y"  // -y assume yes to all queries
+		targetDir    = "-ht" // -ht target directory
+		arjArgsBase  = 3     // base number of args before targets and targetDir
+		arjArgsExtra = 1     // extra args after targets (targetDir+dst)
 	)
-	args := []string{extract, yes, newname}
+	args := make([]string, arjArgsBase, arjArgsBase+len(targets)+arjArgsExtra)
+	args[0] = extract
+	args[1] = yes
+	args[2] = newname
 	args = append(args, targets...)
 	args = append(args, targetDir+dst)
 	cmd := exec.CommandContext(ctx, prog, args...)

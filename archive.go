@@ -154,7 +154,8 @@ func foundLHA(magic string) bool {
 	if words[0] != lha {
 		return false
 	}
-	if len(words) < 4 {
+	const limit = 4
+	if len(words) < limit {
 		return false
 	}
 	if strings.Join(words[0:3], " ") == "lha archive data" {
@@ -379,7 +380,10 @@ func (x Extractor) Generic(run Run, targets ...string) error {
 	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
 	defer cancel()
-	args := []string{run.Extract, filepath.Base(src)}
+	const size = 2
+	args := make([]string, size, size+len(targets))
+	args[0] = run.Extract
+	args[1] = filepath.Base(src)
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Dir = dst
@@ -478,7 +482,7 @@ func ExtractSource(src, name string) (string, error) {
 	// NOTE: os.ReadDir doesn't behave correctly with archives that
 	// contain a single directory in the root, so use a custom walker.
 	entries := 0
-	walkerCount := func(path string, d fs.DirEntry, err error) error {
+	walkerCount := func(_ string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fs.SkipDir
 		}

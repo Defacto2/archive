@@ -81,13 +81,16 @@ func (x Extractor) Zip(targets ...string) error {
 		quieter         = "-qq" // quieter
 		targetDir       = "-d"  // target directory to extract files to
 		allowCtrlChars  = "-^"  // allow control characters in filenames
+		zipArgsBase     = 5     // base args (quieter, notimestamps, allowCtrlChars, overwrite, src)
+		zipArgsExtra    = 2     // extra args after targets (targetDir, dst)
 	)
 	// unzip [-options] file[.zip] [file(s)...] [-x files(s)] [-d exdir]
 	// file[.zip]		path to the zip archive
 	// [file(s)...]		optional list of archived files to process, sep by spaces.
 	// [-x files(s)]	optional files to be excluded.
 	// [-d exdir]		optional target directory to extract files in.
-	args := []string{quieter, notimestamps, allowCtrlChars, overwrite, src}
+	args := make([]string, 0, zipArgsBase+len(targets)+zipArgsExtra)
+	args = append(args, quieter, notimestamps, allowCtrlChars, overwrite, src)
 	args = append(args, targets...)
 	args = append(args, targetDir, dst)
 	cmd := exec.CommandContext(ctx, prog, args...)

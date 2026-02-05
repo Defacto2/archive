@@ -72,14 +72,22 @@ func (x Extractor) Rar(targets ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
 	defer cancel()
 	const (
-		eXtract    = "x"   // x extract files with full path
-		noPaths    = "-ep" // -ep do not preserve paths
-		noComments = "-c-" // -c- do not display comments
-		rename     = "-or" // -or rename files automatically
-		yes        = "-y"  // -y assume yes to all queries
-		outputPath = "-op" // -op output path
+		eXtract      = "x"   // x extract files with full path
+		noPaths      = "-ep" // -ep do not preserve paths
+		noComments   = "-c-" // -c- do not display comments
+		rename       = "-or" // -or rename files automatically
+		yes          = "-y"  // -y assume yes to all queries
+		outputPath   = "-op" // -op output path
+		rarArgsBase  = 6     // base number of args before targets and outputPath
+		rarArgsExtra = 1     // extra args after targets (outputPath+dst)
 	)
-	args := []string{eXtract, noPaths, noComments, rename, yes, src}
+	args := make([]string, rarArgsBase, rarArgsBase+len(targets)+rarArgsExtra)
+	args[0] = eXtract
+	args[1] = noPaths
+	args[2] = noComments
+	args[3] = rename
+	args[4] = yes
+	args[5] = src
 	args = append(args, targets...)
 	args = append(args, outputPath+dst)
 	cmd := exec.CommandContext(ctx, prog, args...)

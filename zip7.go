@@ -123,13 +123,20 @@ func (x Extractor) Zip7(targets ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
 	defer cancel()
 	const (
-		extract   = "x"    // x extract files without paths
-		overwrite = "-aoa" // -aoa overwrite all
-		quiet     = "-bb0" // -bb0 quiet
-		targetDir = "-o"   // -o output directory
-		yes       = "-y"   // -y assume yes to all queries
+		extract      = "x"    // x extract files without paths
+		overwrite    = "-aoa" // -aoa overwrite all
+		quiet        = "-bb0" // -bb0 quiet
+		targetDir    = "-o"   // -o output directory
+		yes          = "-y"   // -y assume yes to all queries
+		zip7ArgsBase = 6      // base number of args before targets
 	)
-	args := []string{extract, overwrite, quiet, yes, targetDir + dst, src}
+	args := make([]string, zip7ArgsBase, zip7ArgsBase+len(targets))
+	args[0] = extract
+	args[1] = overwrite
+	args[2] = quiet
+	args[3] = yes
+	args[4] = targetDir + dst
+	args[5] = src
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Stderr = &buf

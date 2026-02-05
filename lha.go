@@ -118,12 +118,15 @@ func (x Extractor) LHA(targets ...string) error {
 		// "Ignore paths of archived files: extract all archived files to  the  same  directory, ignoring subdirectories."
 		ignorepaths = "i"
 		// "Force overwrite of existing files: do not prompt"
-		overwrite = "f"
-		quiet     = "q1"
-		quieter   = "q2"
+		overwrite   = "f"
+		quiet       = "q1"
+		quieter     = "q2"
+		lhaArgsBase = 2 // base number of args (param, src) before targets
 	)
 	param := fmt.Sprintf("-%s%s%sw=%s", extract, overwrite, ignorepaths, dst)
-	args := []string{param, src}
+	args := make([]string, lhaArgsBase, lhaArgsBase+len(targets))
+	args[0] = param
+	args[1] = src
 
 	// convert targets to lowercase which is a quirk in lha
 	for i, s := range targets {
