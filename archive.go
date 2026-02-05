@@ -126,6 +126,9 @@ func MagicExt(src string) (string, error) {
 		"zstandard compressed data (v0.8+)": zstdx,
 	}
 	result := strings.Split(strings.ToLower(string(out)), ",")
+	if len(result) == 0 {
+		return "", ErrNotArchive
+	}
 	magic := strings.TrimSpace(result[0])
 	if foundLHA(magic) {
 		return lhax, nil
