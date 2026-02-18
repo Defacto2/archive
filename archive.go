@@ -517,12 +517,13 @@ func ExtractSource(src, name string) (string, error) {
 	return dst, nil
 }
 
-// filearchive confirms if the src file is a supported archive file.
+// filearchive confirms whether the src file is a supported archive file.
 func filearchive(src string) bool {
 	r, err := os.Open(src)
 	if err != nil {
 		return false
 	}
+	defer r.Close()
 	sign, err := magicnumber.Archive(r)
 	if err != nil {
 		return false
@@ -530,8 +531,8 @@ func filearchive(src string) bool {
 	return sign != magicnumber.Unknown
 }
 
-// List returns the files within an 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
-// This filename extension is used to determine the archive format.
+// List returns the files within a 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
+// The filename extension is used to determine the archive format.
 func List(src, filename string) ([]string, error) {
 	inf, err := os.Stat(src)
 	if errors.Is(err, fs.ErrNotExist) {
