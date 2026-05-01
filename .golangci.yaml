@@ -1,4 +1,4 @@
-version: "2"
+version: '2'
 linters:
   default: all
   disable:
@@ -9,6 +9,8 @@ linters:
     - wsl
     - wsl_v5
   settings:
+    cyclop:
+      max-complexity: 15
     misspell:
       locale: US
   exclusions:

@@ -75,6 +75,12 @@ func CompressDir(root, dest string) (int64, error) {
 	deflater := zip.NewWriter(zipfile)
 	defer deflater.Close()
 
+	osr, err := os.OpenRoot(root)
+	if err != nil {
+		return 0, fmt.Errorf("rezip open root error: %w", err)
+	}
+	defer osr.Close()
+
 	var written int64
 	addFile := func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -86,15 +92,15 @@ func CompressDir(root, dest string) (int64, error) {
 		if self := path == root; self {
 			return nil
 		}
-		rel, err := filepath.Rel(root, path)
+		name, err := filepath.Rel(root, path)
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
-		dst, err := deflater.Create(rel)
+		dst, err := deflater.Create(name)
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}
-		src, err := os.Open(path)
+		src, err := osr.Open(name)
 		if err != nil {
 			return fmt.Errorf("add file: %w", err)
 		}

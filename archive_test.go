@@ -317,7 +317,7 @@ func TestList(t *testing.T) {
 	}
 }
 
-func TestInvalidFormats(t *testing.T) { //nolint:cyclop,funlen
+func TestInvalidFormats(t *testing.T) { //nolint:funlen
 	t.Parallel()
 	for _, tt := range Tests() { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
