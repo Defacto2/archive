@@ -430,7 +430,8 @@ func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) erro
 	case magicnumber.ArchiveRobertJung:
 		return x.ARJ(targets...)
 	case magicnumber.YoshiLHA:
-		return x.LHA(targets...)
+		return x.Unar(targets...)
+	// return x.LHA(targets...)
 	case magicnumber.RoshalARchive,
 		magicnumber.RoshalARchivev5:
 		return x.Rar(targets...)
@@ -453,7 +454,7 @@ func (x Extractor) unknowns(sign magicnumber.Signature) error {
 func ExtractAll(src, dst string) error {
 	e := Extractor{Source: src, Destination: dst}
 	if err := e.Extract(); err != nil {
-		return fmt.Errorf("extract all %w", err)
+		return fmt.Errorf("extract all: %w", err)
 	}
 	return nil
 }

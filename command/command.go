@@ -19,6 +19,7 @@ const (
 	HWZip   = "hwzip"   // Hwzip the zip decompression command for files using obsolete methods.
 	Lha     = "lha"     // Lha is the lha/lzh decompression command.
 	Tar     = "tar"     // Tar is the tar decompression command.
+	Unar    = "unar"    // Unar is the The Unarchiver decompression command for multiple types.
 	Unrar   = "unrar"   // Unrar is the rar decompression command.
 	Unzip   = "unzip"   // Unzip is the zip decompression command.
 	Zip7    = "7zz"     // Zip7 is the 7-Zip decompression command.
