@@ -4,9 +4,11 @@ go 1.26.5
 
 require (
 	github.com/Defacto2/helper v1.6.8
-	github.com/Defacto2/magicnumber v1.2.5
+	github.com/Defacto2/magicnumber v1.3.1
 	github.com/nalgeon/be v0.3.0
 )
+
+//	replace github.com/Defacto2/magicnumber => ../magicnumber
 
 require (
 	github.com/google/uuid v1.6.0 // indirect

@@ -64,6 +64,7 @@ const (
 	gzipx = ".gz"  // GNU Zip by Jean-loup Gailly and Mark Adler
 	lhax  = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
 	lhzx  = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
+	pakx  = ".pak" // PAK by NoGate Associates
 	rarx  = ".rar" // Roshal ARchive by Alexander Roshal
 	tarx  = ".tar" // Tape ARchive by AT&T Bell Labs
 	tgzx  = ".tgz" // Tape ARchive by AT&T Bell Labs and GNU Zip
@@ -118,6 +119,7 @@ func MagicExt(src string) (string, error) {
 		"bzip2 compressed data":             ".bz2",
 		"microsoft cabinet archive data":    cabx,
 		"gzip compressed data":              gzipx,
+		"pak archive data":                  pakx,
 		"rar archive data":                  rarx,
 		"posix tar archive":                 tarx,
 		"xz compressed data":                xzx,
@@ -229,6 +231,8 @@ func (c *Content) readers(src, ext string) error {
 		return c.Tar(src)
 	case zipx:
 		return c.Zip(src)
+	case pakx:
+		return c.Lsar(src)
 	}
 	return fmt.Errorf("content read %w: %q", ErrNotImplemented, ext)
 }
@@ -297,7 +301,7 @@ type Extractor struct {
 // The following archive formats do not support targets and will always extract the whole archive.
 //   - Gzip
 //
-// Some archive formats that could be impelmented if needed in the future,
+// Some archive formats that could be implemented if needed in the future,
 // "freearc", "zoo".
 func (x Extractor) Extract(targets ...string) error {
 	r, err := os.Open(x.Source)
@@ -316,7 +320,7 @@ func (x Extractor) Extract(targets ...string) error {
 // zip decompression program on the file archive.
 //
 // Some filenames set by MS-DOS are not valid filenames on modern systems
-// due to the use of codepoints that are not valid in Unicode.
+// due to the use of code-points that are not valid in Unicode.
 //
 // If the ZIP file uses a passphrase an error is returned.
 func (x Extractor) Zips(targets ...string) error {
@@ -341,8 +345,7 @@ func (x Extractor) Zips(targets ...string) error {
 	return nil
 }
 
-// Run is a struct that holds the program and extract command
-// for use with the generic extractor.
+// Run holds the program and extract command for use with the generic extractor.
 type Run struct {
 	Program string // Program is the archiver program to run, but not the full path.
 	Extract string // Extract is the program command to extract files from the archive.
@@ -429,9 +432,10 @@ func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) erro
 		return x.ARC(targets...)
 	case magicnumber.ArchiveRobertJung:
 		return x.ARJ(targets...)
-	case magicnumber.YoshiLHA:
+	case
+		magicnumber.YoshiLHA,
+		magicnumber.NoGatePAK:
 		return x.Unar(targets...)
-	// return x.LHA(targets...)
 	case magicnumber.RoshalARchive,
 		magicnumber.RoshalARchivev5:
 		return x.Rar(targets...)
@@ -466,7 +470,7 @@ func ExtractAll(src, dst string) error {
 // To act as a pseudo cache, if the temporary directory already exists
 // and it contains two or more items, then nothing will done and it
 // is assumed the src file has already been extracted.
-// This behavor can be overwritten by using [os.RemoveAll] after
+// This behavior can be overwritten by using [os.RemoveAll] after
 // using the func.
 //
 // The absolute path of the extracted archive is returned.
@@ -573,15 +577,15 @@ func List(src, filename string) ([]string, error) {
 
 // commander uses system archiver and decompression programs to read the src archive file.
 func commander(src, filename string) ([]string, error) {
-	cnt := Content{
+	cont := Content{
 		Ext:   "",
 		Files: []string{},
 	}
-	if err := cnt.Read(src); err != nil {
-		return nil, fmt.Errorf("commander failed with %s (%q): %w", filename, cnt.Ext, err)
+	if err := cont.Read(src); err != nil {
+		return nil, fmt.Errorf("commander failed with %s (%q): %w", filename, cont.Ext, err)
 	}
 	// remove empty entries
-	files := cnt.Files
+	files := cont.Files
 	files = slices.DeleteFunc(files, func(s string) bool {
 		return strings.TrimSpace(s) == ""
 	})

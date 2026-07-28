@@ -92,6 +92,18 @@ func Tests() []TestData { //nolint:funlen
 		},
 		{
 			WantErr:  false,
+			Testname: "LHA/LH0",
+			Filename: "LH0.LZH", Ext: ".lha",
+			cmdDos: "LHARcnt.EXE", cmdInfo: "LHarc, May 1990", cmdVersion: "1.13",
+		},
+		{
+			WantErr:  false,
+			Testname: "LHA/LH5",
+			Filename: "LH5.LZH", Ext: ".lha",
+			cmdDos: "LHARcnt.EXE", cmdInfo: "LHarc, May 1990", cmdVersion: "1.13",
+		},
+		{
+			WantErr:  false,
 			Testname: "RAR",
 			Filename: "RAR250.RAR", Ext: ".rar",
 			cmdDos: "RAR.EXE", cmdInfo: "RAR archiver, 1999", cmdVersion: "2.50",
@@ -127,8 +139,8 @@ func Tests() []TestData { //nolint:funlen
 			cmdDos: "hwzip", cmdInfo: "Shrink", cmdVersion: "2.3",
 		},
 		{
-			WantErr:  true,
-			Testname: "Unsupported Pak",
+			WantErr:  false,
+			Testname: "Pak",
 			Filename: "PAK100.PAK", Ext: ".pak",
 			cmdDos: "PAK.EXE", cmdInfo: "NoGate Consulting, 1988", cmdVersion: "1.0",
 		},
@@ -138,6 +150,53 @@ func Tests() []TestData { //nolint:funlen
 			Filename: "TESTDAT1.TXT", Ext: ".txt",
 			cmdDos: "", cmdInfo: "", cmdVersion: "",
 		},
+	}
+}
+
+func TestLsar(t *testing.T) {
+	t.Parallel()
+	noSupport := []string{"Zstandard"}
+	for _, tt := range Tests() { //nolint:varnamelen
+		t.Run(tt.Testname, func(t *testing.T) {
+			t.Parallel()
+			src := filepath.Join("testdata", tt.Filename)
+			var content archive.Content
+			if slices.Contains(noSupport, tt.Testname) {
+				tt.WantErr = true
+			}
+			err := content.Lsar(src)
+			if tt.WantErr {
+				be.Err(t, err)
+			} else {
+				be.Err(t, err, nil)
+			}
+			ext := content.Ext
+			be.Equal(t, ext, "")
+		})
+	}
+}
+
+func TestUnar(t *testing.T) {
+	t.Parallel()
+	noSupport := []string{"Reduce ZIP", "Shrink ZIP", "Zstandard"}
+	for _, tt := range Tests() { //nolint:varnamelen
+		t.Run(tt.Testname, func(t *testing.T) {
+			t.Parallel()
+			src := filepath.Join("testdata", tt.Filename)
+			extract := archive.Extractor{
+				Source:      src,
+				Destination: t.ArtifactDir(),
+			}
+			if slices.Contains(noSupport, tt.Testname) {
+				tt.WantErr = true
+			}
+			err := extract.Unar()
+			if tt.WantErr {
+				be.Err(t, err)
+			} else {
+				be.Err(t, err, nil)
+			}
+		})
 	}
 }
 
@@ -152,7 +211,7 @@ func TestMagicExt(t *testing.T) {
 				be.Err(t, err)
 			} else {
 				be.Err(t, err, nil)
-				be.Equal(t, tt.Ext, got)
+				be.Equal(t, got, tt.Ext)
 			}
 		})
 	}
@@ -162,20 +221,20 @@ func TestContent_Read(t *testing.T) {
 	for _, tt := range Tests() { //nolint:varnamelen
 		const want = 3
 		t.Run(tt.Testname, func(t *testing.T) {
-			got := archive.Content{Ext: "", Files: []string{}}
+			arch := archive.Content{Ext: "", Files: []string{}}
 			src := filepath.Join("testdata", tt.Filename)
-			err := got.Read(src)
+			err := arch.Read(src)
 			if tt.WantErr {
 				be.Err(t, err)
 				return
 			}
 			be.Err(t, err, nil)
-			n := len(got.Files)
+			got := len(arch.Files)
 			if tt.Ext == gzx {
-				be.Equal(t, 1, n)
+				be.Equal(t, got, 1)
 				return
 			}
-			be.Equal(t, want, n)
+			be.Equal(t, got, want)
 		})
 	}
 }
@@ -197,14 +256,14 @@ func TestExtractor_Extract(t *testing.T) {
 				return
 			}
 			be.Err(t, err, nil)
-			cnt, err := helper.Count(tmp)
+			got, err := helper.Count(tmp)
 			be.Err(t, err, nil)
 			if tt.Ext == gzx {
-				be.Equal(t, 1, cnt)
+				be.Equal(t, got, 1)
 				lookupGzipExtracted(t, tmp)
 				return
 			}
-			be.Equal(t, want, cnt)
+			be.Equal(t, got, want)
 		})
 	}
 }
@@ -239,18 +298,18 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 				return
 			}
 			be.Err(t, err, nil)
-			cnt, err := helper.Count(tmp)
+			got, err := helper.Count(tmp)
 			be.Err(t, err, nil)
 			if tt.Ext == gzx {
-				be.Equal(t, 1, cnt)
+				be.Equal(t, got, 1)
 				return
 			}
 			if strings.Contains(tt.Testname, "Shrink") ||
 				strings.Contains(tt.Testname, "Reduce") {
-				be.Equal(t, 3, cnt)
+				be.Equal(t, got, 3)
 				return
 			}
-			be.Equal(t, want, cnt)
+			be.Equal(t, got, want)
 		})
 	}
 }
@@ -328,6 +387,16 @@ func TestInvalidFormats(t *testing.T) { //nolint:funlen
 				Files: []string{},
 			}
 			tmp := t.TempDir()
+			skipExts := []string{
+				".7z", ".arc", ".arj", ".bz2", ".cab", ".gz", ".lha", ".pak", ".rar", ".tar", ".tgz", ".xz", ".zst", ".zip",
+			}
+			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
+				err := cnt.Lsar(src)
+				be.Err(t, err)
+				x := archive.Extractor{Source: src, Destination: tmp}
+				err = x.Unar()
+				be.Err(t, err)
+			}
 			if !strings.EqualFold(tt.Ext, ".7z") {
 				err := cnt.Zip7(src)
 				be.Err(t, err)
@@ -371,7 +440,7 @@ func TestInvalidFormats(t *testing.T) { //nolint:funlen
 				err = x.Rar()
 				be.Err(t, err)
 			}
-			skipExts := []string{".7z", ".bz2", ".cab", ".lha", ".tar", ".tgz", ".xz", ".zst", ".zip"}
+			skipExts = []string{".7z", ".bz2", ".cab", ".lha", ".tar", ".tgz", ".xz", ".zst", ".zip"}
 			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
 				err := cnt.Tar(src)
 				be.Err(t, err)
