@@ -18,17 +18,17 @@ import (
 // More information:
 //   - the unarchiver app: https://theunarchiver.com/
 //   - unar command line tool: https://theunarchiver.com/command-line
-func (c *Content) Lsar(src string) error {
+func (c *Content) Lsar(ctx context.Context, src string) error {
 	const format = `content lsar %w`
 	prog, err := exec.LookPath(command.Lsar)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
 
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, src, "-json")
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 
 	out, err := cmd.Output()
@@ -81,15 +81,14 @@ func Lsar(data []byte) (string, []string, error) {
 // More information:
 //   - the unarchiver app: https://theunarchiver.com/
 //   - unar command line tool: https://theunarchiver.com/command-line
-func (x Extractor) Unar(targets ...string) error {
+func (x Extractor) Unar(ctx context.Context, targets ...string) error {
 	const fmtext = "extract unar %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unar)
 	if err != nil {
 		return fmt.Errorf(fmtext, err)
 	}
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
 	// example command: unar -quiet -no-directory -copy-time -force-overwrite -output-directory <destdir> archive [items]
 	args := []string{"-force-overwrite", "-no-directory", "-output-directory", dst, src}
@@ -99,6 +98,7 @@ func (x Extractor) Unar(targets ...string) error {
 	const format = fmtext + `: %s: cmd errors: %q cmd out: %q`
 	// Usage: unar [options] archive [files ...]
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	b, err := cmd.Output()
 	cmdout := strings.ReplaceAll(strings.TrimSpace(string(b)), "\n", " ")

@@ -164,7 +164,7 @@ func TestLsar(t *testing.T) {
 			if slices.Contains(noSupport, tt.Testname) {
 				tt.WantErr = true
 			}
-			err := content.Lsar(src)
+			err := content.Lsar(t.Context(), src)
 			if tt.WantErr {
 				be.Err(t, err)
 			} else {
@@ -190,7 +190,7 @@ func TestUnar(t *testing.T) {
 			if slices.Contains(noSupport, tt.Testname) {
 				tt.WantErr = true
 			}
-			err := extract.Unar()
+			err := extract.Unar(t.Context())
 			if tt.WantErr {
 				be.Err(t, err)
 			} else {
@@ -206,7 +206,7 @@ func TestMagicExt(t *testing.T) {
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
-			got, err := archive.MagicExt(src)
+			got, err := archive.MagicExt(t.Context(), src)
 			if tt.WantErr {
 				be.Err(t, err)
 			} else {
@@ -223,7 +223,7 @@ func TestContent_Read(t *testing.T) {
 		t.Run(tt.Testname, func(t *testing.T) {
 			arch := archive.Content{Ext: "", Files: []string{}}
 			src := filepath.Join("testdata", tt.Filename)
-			err := arch.Read(src)
+			err := arch.Read(t.Context(), src)
 			if tt.WantErr {
 				be.Err(t, err)
 				return
@@ -249,7 +249,7 @@ func TestExtractor_Extract(t *testing.T) {
 			err := archive.Extractor{
 				Source:      filepath.Join("testdata", tt.Filename),
 				Destination: tmp,
-			}.Extract()
+			}.Extract(t.Context())
 			if tt.WantErr {
 				fmt.Fprintln(os.Stderr, err)
 				be.Err(t, err)
@@ -292,7 +292,7 @@ func TestExtractor_ExtractTarget(t *testing.T) {
 			err := archive.Extractor{
 				Source:      filepath.Join("testdata", tt.Filename),
 				Destination: tmp,
-			}.Extract(target2, target3)
+			}.Extract(t.Context(), target2, target3)
 			if tt.WantErr {
 				be.Err(t, err)
 				return
@@ -326,12 +326,12 @@ func TestExtractor_Zips(t *testing.T) {
 			err := archive.Extractor{
 				Source:      filepath.Join("testdata", tt.Filename),
 				Destination: tmp,
-			}.Zips()
+			}.Zips(t.Context())
 			be.Err(t, err, nil)
 			err = archive.Extractor{
 				Source:      filepath.Join("testdata", tt.Filename),
 				Destination: tmp,
-			}.Zips("TESTDAT2.TXT", "TESTDAT3.TXT")
+			}.Zips(t.Context(), "TESTDAT2.TXT", "TESTDAT3.TXT")
 			switch tt.Testname {
 			case "Reduce ZIP":
 				be.Err(t, err)
@@ -346,7 +346,7 @@ func TestExtractSource(t *testing.T) {
 	for _, tt := range Tests() {
 		t.Run(tt.Testname, func(t *testing.T) {
 			src := filepath.Join("testdata", tt.Filename)
-			got, err := archive.ExtractSource(src, "tester")
+			got, err := archive.ExtractSource(t.Context(), src, "tester")
 			if tt.WantErr && tt.Ext != ".txt" {
 				be.Err(t, err)
 				return
@@ -364,7 +364,7 @@ func TestList(t *testing.T) {
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
-			got, err := archive.List(src, tt.Filename)
+			got, err := archive.List(t.Context(), src, tt.Filename)
 			if tt.WantErr && tt.Ext != ".txt" {
 				be.Err(t, err)
 				return
@@ -391,68 +391,68 @@ func TestInvalidFormats(t *testing.T) { //nolint:funlen
 				".7z", ".arc", ".arj", ".bz2", ".cab", ".gz", ".lha", ".pak", ".rar", ".tar", ".tgz", ".xz", ".zst", ".zip",
 			}
 			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
-				err := cnt.Lsar(src)
+				err := cnt.Lsar(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.Unar()
+				err = x.Unar(t.Context())
 				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".7z") {
-				err := cnt.Zip7(src)
+				err := cnt.Zip7(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.Zip7()
+				err = x.Zip7(t.Context())
 				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".arc") {
-				err := cnt.ARC(src)
+				err := cnt.ARC(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.ARC()
+				err = x.ARC(t.Context())
 				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".arj") {
-				err := cnt.ARJ(src)
+				err := cnt.ARJ(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.ARJ()
+				err = x.ARJ(t.Context())
 				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, gzx) &&
 				!strings.EqualFold(tt.Ext, ".tgz") {
-				err := cnt.Gzip(src)
+				err := cnt.Gzip(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.Gzip()
+				err = x.Gzip(t.Context())
 				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".lha") {
-				err := cnt.LHA(src)
+				err := cnt.LHA(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.LHA()
+				err = x.LHA(t.Context())
 				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".rar") {
-				err := cnt.Rar(src)
+				err := cnt.Rar(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.Rar()
+				err = x.Rar(t.Context())
 				be.Err(t, err)
 			}
 			skipExts = []string{".7z", ".bz2", ".cab", ".lha", ".tar", ".tgz", ".xz", ".zst", ".zip"}
 			if !slices.Contains(skipExts, strings.ToLower(tt.Ext)) {
-				err := cnt.Tar(src)
+				err := cnt.Tar(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.Tar()
+				err = x.Tar(t.Context())
 				be.Err(t, err)
 			}
 			if !strings.EqualFold(tt.Ext, ".zip") {
-				err := cnt.Zip(src)
+				err := cnt.Zip(t.Context(), src)
 				be.Err(t, err)
 				x := archive.Extractor{Source: src, Destination: tmp}
-				err = x.Zip()
+				err = x.Zip(t.Context())
 				be.Err(t, err)
 			}
 		})

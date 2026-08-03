@@ -64,9 +64,9 @@ func TestCompressDir(t *testing.T) {
 func TestUnzip(t *testing.T) {
 	t.Parallel()
 	src := td("PKZ80A1.ZIP")
-	err := rezip.Test(src)
+	err := rezip.Test(t.Context(), src)
 	be.Err(t, err, nil)
 	src = td("ARJ310.ARJ")
-	err = rezip.Test(src)
+	err = rezip.Test(t.Context(), src)
 	be.Err(t, err)
 }

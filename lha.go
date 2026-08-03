@@ -18,7 +18,7 @@ import (
 // On Linux either the jlha-utils or lhasa work.
 //
 // [lha program]: https://fragglet.github.io/lhasa/
-func (c *Content) LHA(src string) error {
+func (c *Content) LHA(ctx context.Context, src string) error {
 	const format = "content lha %w"
 	prog, err := exec.LookPath(command.Lha)
 	if err != nil {
@@ -26,12 +26,11 @@ func (c *Content) LHA(src string) error {
 	}
 
 	const list = "-l"
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
-
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf(format, err)
@@ -104,15 +103,14 @@ func notLHA(output []byte) bool {
 // On Linux either the jlha-utils or lhasa work.
 //
 // [lha program]: https://fragglet.github.io/lhasa/
-func (x Extractor) LHA(targets ...string) error {
+func (x Extractor) LHA(ctx context.Context, targets ...string) error {
 	const format = "extract lha %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Lha)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
 	// example command: lha -eq2w=destdir/ archive *
 	const (
@@ -138,6 +136,7 @@ func (x Extractor) LHA(targets ...string) error {
 	args = append(args, targets...)
 
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {

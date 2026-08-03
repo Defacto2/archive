@@ -17,7 +17,7 @@ import (
 // The format credited to Robert Jung using the [arj program].
 //
 // [arj program]: https://arj.sourceforge.net/
-func (c *Content) ARJ(src string) error {
+func (c *Content) ARJ(ctx context.Context, src string) error {
 	const format = "content arj %w"
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
@@ -32,11 +32,12 @@ func (c *Content) ARJ(src string) error {
 		defer os.Remove(name)
 	}
 
-	const verboselist = "l"
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
+
+	const verboselist = "l"
 	cmd := exec.CommandContext(ctx, prog, verboselist, newname)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
@@ -100,7 +101,7 @@ func notArj(output []byte) bool {
 // If the targets are empty then all files are extracted.
 //
 // [arj program]: https://arj.sourceforge.net/
-func (x Extractor) ARJ(targets ...string) error {
+func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
 	const format = "extract arj %w"
 	src, dst := x.Source, x.Destination
 	if inf, err := os.Stat(dst); err != nil {
@@ -122,8 +123,7 @@ func (x Extractor) ARJ(targets ...string) error {
 		defer os.Remove(name)
 	}
 
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
 	// note: these flags are for arj32 v3.10
 	const (
@@ -140,6 +140,7 @@ func (x Extractor) ARJ(targets ...string) error {
 	args = append(args, targets...)
 	args = append(args, targetDir+dst)
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {

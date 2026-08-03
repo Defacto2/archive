@@ -17,17 +17,19 @@ import (
 // Tar returns the content of the Tar archive using the [bsdtar program].
 //
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
-func (c *Content) Tar(src string) error {
+func (c *Content) Tar(ctx context.Context, src string) error {
 	const format = `content tar %w`
 	prog, err := exec.LookPath(command.BSDTar)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
-	const list = "-tf"
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
+
+	const list = "-tf"
 	cmd := exec.CommandContext(ctx, prog, list, src)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
@@ -54,7 +56,7 @@ func (c *Content) Tar(src string) error {
 //
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 // [libarchive library]: http://www.libarchive.org/
-func (x Extractor) Tar(targets ...string) error {
+func (x Extractor) Tar(ctx context.Context, targets ...string) error {
 	const format = `extract tar %w`
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.BSDTar)
@@ -64,8 +66,7 @@ func (x Extractor) Tar(targets ...string) error {
 	if dst == "" {
 		return ErrDest
 	}
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
 	// note: BSD tar uses different flags to GNU tar
 	const (
@@ -86,6 +87,7 @@ func (x Extractor) Tar(targets ...string) error {
 		noOwner, noPerms, noXattrs, targetDir, dst)
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
@@ -97,8 +99,8 @@ func (x Extractor) Tar(targets ...string) error {
 }
 
 // TempTar functions like Tar but removes the source tarball after extraction.
-func (x Extractor) TempTar(targets ...string) error {
+func (x Extractor) TempTar(ctx context.Context, targets ...string) error {
 	tarball := x.Source
 	defer os.Remove(tarball)
-	return x.Tar(targets...)
+	return x.Tar(ctx, targets...)
 }

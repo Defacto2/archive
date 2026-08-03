@@ -17,17 +17,17 @@ import (
 // The format is credited to Phil Katz using the [zipinfo program].
 //
 // [zipinfo program]: https://infozip.sourceforge.net/
-func (c *Content) Zip(src string) error {
+func (c *Content) Zip(ctx context.Context, src string) error {
 	const format = "content zipinfo %w"
 	prog, err := exec.LookPath(command.ZipInfo)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
 	const list = "-1"
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
@@ -59,7 +59,7 @@ func (c *Content) Zip(src string) error {
 // If the targets are empty then all files are extracted.
 //
 // [unzip program]: https://www.linux.org/docs/man1/unzip.html
-func (x Extractor) Zip(targets ...string) error {
+func (x Extractor) Zip(ctx context.Context, targets ...string) error {
 	const format = "extract unzip %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unzip)
@@ -69,8 +69,7 @@ func (x Extractor) Zip(targets ...string) error {
 	if dst == "" {
 		return ErrDest
 	}
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
 	// [-options]
 	const (
@@ -96,6 +95,7 @@ func (x Extractor) Zip(targets ...string) error {
 	args = append(args, targets...)
 	args = append(args, targetDir, dst)
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
@@ -119,8 +119,8 @@ func (x Extractor) Zip(targets ...string) error {
 // hwzip does not support targets, the extracting of individual files from a zip archive.
 //
 // [hwzip program]: https://www.hanshq.net/zip2.html
-func (x Extractor) ZipHW() error {
-	return x.Generic(Run{
+func (x Extractor) ZipHW(ctx context.Context) error {
+	return x.Generic(ctx, Run{
 		Program: command.HWZip,
 		Extract: "extract",
 	})

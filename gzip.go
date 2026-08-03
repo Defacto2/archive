@@ -18,17 +18,17 @@ import (
 // Gzip returns the uncompressed filename of the [gzip] archive which is expected to be a single file.
 //
 // [gzip]: https://www.gnu.org/software/gzip/
-func (c *Content) Gzip(src string) error {
+func (c *Content) Gzip(ctx context.Context, src string) error {
 	const format = "content gzip %w"
 	prog, err := exec.LookPath(command.Gzip)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
 	const test = "-t"
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, test, src)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
@@ -47,7 +47,7 @@ func (c *Content) Gzip(src string) error {
 	case // tar.gz case must be before the .gz case.
 		strings.HasSuffix(base, tgzx),
 		strings.HasSuffix(base, ".tar.gz"):
-		return c.readTarball(src)
+		return c.readTarball(ctx, src)
 	case strings.HasSuffix(base, gzipx):
 		c.readname(base)
 		return nil
@@ -76,7 +76,7 @@ func GzipName(src string) string {
 //
 // This is slower than other read methods as the tarball archive is
 // first decompressed to a temporary directory before being read.
-func (c *Content) readTarball(src string) error {
+func (c *Content) readTarball(ctx context.Context, src string) error {
 	const format = "read tarball %w"
 	tmp, err := helper.MkContent(src)
 	if err != nil {
@@ -87,7 +87,7 @@ func (c *Content) readTarball(src string) error {
 		Source:      src,
 		Destination: tmp,
 	}
-	if err := x.tarball(); err != nil {
+	if err := x.tarball(ctx); err != nil {
 		return fmt.Errorf(format, err)
 	}
 	s := strings.TrimSuffix(filepath.Base(src), gzipx)
@@ -99,7 +99,7 @@ func (c *Content) readTarball(src string) error {
 	if inf.IsDir() {
 		return fmt.Errorf(format, ErrFile)
 	}
-	ext, err := MagicExt(name)
+	ext, err := MagicExt(ctx, name)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
@@ -108,7 +108,7 @@ func (c *Content) readTarball(src string) error {
 	}
 	c.Ext = tarx
 	defer os.Remove(name)
-	return c.Tar(name)
+	return c.Tar(ctx, name)
 }
 
 // Gzip decompresses the source archive file to the destination directory.
@@ -119,23 +119,23 @@ func (c *Content) readTarball(src string) error {
 // otherwise it is ignored.
 //
 // [gzip]: https://www.gnu.org/software/gzip/
-func (x Extractor) Gzip(targets ...string) error {
-	m, err := x.gzip()
+func (x Extractor) Gzip(ctx context.Context, targets ...string) error {
+	m, err := x.gzip(ctx)
 	if err != nil {
 		return err
 	}
 	if m.magic == tgzx {
-		xtb, err := opentarball(m.name, x.Destination)
+		xtb, err := opentarball(ctx, m.name, x.Destination)
 		if err != nil {
 			return err
 		}
-		return xtb.TempTar(targets...)
+		return xtb.TempTar(ctx, targets...)
 	}
 	return nil
 }
 
 // opentarball extracts the tarball archive from the gzip compressed file.
-func opentarball(name string, dest string) (Extractor, error) {
+func opentarball(ctx context.Context, name string, dest string) (Extractor, error) {
 	const format = "open tarball %w"
 	empty := Extractor{Source: "", Destination: ""}
 	dir := filepath.Dir(name)
@@ -144,7 +144,7 @@ func opentarball(name string, dest string) (Extractor, error) {
 	if err != nil {
 		return empty, fmt.Errorf(format, err)
 	}
-	magic, err := MagicExt(tarball)
+	magic, err := MagicExt(ctx, tarball)
 	if err != nil {
 		return empty, fmt.Errorf(format, err)
 	}
@@ -159,22 +159,22 @@ type method struct {
 	name  string
 }
 
-func (x Extractor) tarball(targets ...string) error {
-	m, err := x.gzip()
+func (x Extractor) tarball(ctx context.Context, targets ...string) error {
+	m, err := x.gzip(ctx)
 	if err != nil {
 		return err
 	}
 	if m.magic == tgzx {
-		xtb, err := opentarball(m.name, x.Destination)
+		xtb, err := opentarball(ctx, m.name, x.Destination)
 		if err != nil {
 			return err
 		}
-		return xtb.Tar(targets...)
+		return xtb.Tar(ctx, targets...)
 	}
 	return nil
 }
 
-func (x Extractor) gzip() (method, error) {
+func (x Extractor) gzip(ctx context.Context) (method, error) {
 	const format = "extract gzip %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Gzip)
@@ -191,13 +191,12 @@ func (x Extractor) gzip() (method, error) {
 	if err != nil {
 		return method{}, fmt.Errorf(format, err)
 	}
-	magic, err := MagicExt(name)
+	magic, err := MagicExt(ctx, name)
 	if err != nil {
 		return method{}, fmt.Errorf(format, err)
 	}
 
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
 	const (
 		decompress = "--decompress" // -d decompress
@@ -206,6 +205,7 @@ func (x Extractor) gzip() (method, error) {
 	)
 	args := []string{decompress, restore, overwrite, name}
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {

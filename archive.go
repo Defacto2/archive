@@ -75,6 +75,7 @@ const (
 )
 
 var (
+	ErrContext        = errors.New("context cannot be nil")
 	ErrDest           = errors.New("destination is empty")
 	ErrExt            = errors.New("extension is not a supported archive format")
 	ErrHLExt          = errors.New("not a valid extension, it must be in the format, .ext")
@@ -97,13 +98,13 @@ var (
 // otherwise the file will be treated as a gzip archive.
 //
 // [file]: https://www.darwinsys.com/file/
-func MagicExt(src string) (string, error) {
+func MagicExt(ctx context.Context, src string) (string, error) {
 	const format = "archive magic file"
 	prog, err := exec.LookPath("file")
 	if err != nil {
 		return "", fmt.Errorf(format+" lookup %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, "--brief", src)
 	out, err := cmd.Output()
@@ -204,38 +205,38 @@ type Content struct {
 // The filename is used to determine the archive format.
 //
 // Supported formats are: 7-zip, arc, arj, Gzip, lha, lzh, rar, tar, zip.
-func (c *Content) Read(src string) error {
+func (c *Content) Read(ctx context.Context, src string) error {
 	const format = "content read %w"
-	ext, err := MagicExt(src)
+	ext, err := MagicExt(ctx, src)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
-	return c.readers(src, ext)
+	return c.readers(ctx, src, ext)
 }
 
-func (c *Content) readers(src, ext string) error {
+func (c *Content) readers(ctx context.Context, src, ext string) error {
 	const format = "content read %w: %q"
 	switch strings.ToLower(ext) {
 	case zip7x:
-		return c.Zip7(src)
+		return c.Zip7(ctx, src)
 	case arcx:
-		return c.ARC(src)
+		return c.ARC(ctx, src)
 	case arjx:
-		return c.ARJ(src)
+		return c.ARJ(ctx, src)
 	case cabx:
-		return c.Cab(src)
+		return c.Cab(ctx, src)
 	case gzipx, tgzx:
-		return c.Gzip(src)
+		return c.Gzip(ctx, src)
 	case lhax, lhzx:
-		return c.LHA(src)
+		return c.LHA(ctx, src)
 	case rarx:
-		return c.Rar(src)
+		return c.Rar(ctx, src)
 	case bz2x, tarx, xzx, zstdx:
-		return c.Tar(src)
+		return c.Tar(ctx, src)
 	case zipx:
-		return c.Zip(src)
+		return c.Zip(ctx, src)
 	case pakx:
-		return c.Lsar(src)
+		return c.Lsar(ctx, src)
 	}
 	return fmt.Errorf(format, ErrNotImplemented, ext)
 }
@@ -307,7 +308,7 @@ type Extractor struct {
 //
 // Some archive formats that could be implemented if needed in the future,
 // "freearc", "zoo".
-func (x Extractor) Extract(targets ...string) error {
+func (x Extractor) Extract(ctx context.Context, targets ...string) error {
 	const format = "extractor extract"
 	r, err := os.Open(x.Source)
 	if err != nil {
@@ -318,7 +319,7 @@ func (x Extractor) Extract(targets ...string) error {
 	if err != nil {
 		return fmt.Errorf(format+" magic %w", err)
 	}
-	return x.checkSign(sign, targets...)
+	return x.checkSign(ctx, sign, targets...)
 }
 
 // Zips attempts to delegate the extraction of the source archive to the correct
@@ -328,24 +329,24 @@ func (x Extractor) Extract(targets ...string) error {
 // due to the use of code-points that are not valid in Unicode.
 //
 // If the ZIP file uses a passphrase an error is returned.
-func (x Extractor) Zips(targets ...string) error {
+func (x Extractor) Zips(ctx context.Context, targets ...string) error {
 	const format = "archive zip extract"
 	_, err := pkzip.Methods(x.Source)
 	if errors.Is(err, pkzip.ErrPassParse) {
 		return fmt.Errorf(format+" %w", err)
 	}
-	err = x.Zip(targets...)
+	err = x.Zip(ctx, targets...)
 	if err == nil {
 		return nil
 	}
 	if len(targets) > 0 {
-		if err1 := x.Tar(targets...); err1 != nil {
+		if err1 := x.Tar(ctx, targets...); err1 != nil {
 			return fmt.Errorf(format+" all methods: %w", err)
 		}
 		return nil
 	}
-	if errhw := x.ZipHW(); errhw != nil {
-		if err3 := x.Tar(); err3 != nil {
+	if errhw := x.ZipHW(ctx); errhw != nil {
+		if err3 := x.Tar(ctx); err3 != nil {
 			return fmt.Errorf(format+" all methods: %w", err)
 		}
 	}
@@ -370,7 +371,7 @@ type Run struct {
 // To work around this, Generic copies the source archive
 // to the destination directory, uses that as the working directory
 // and extracts the files. The copied source archive is then removed.
-func (x Extractor) Generic(run Run, targets ...string) error {
+func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) error {
 	const format = "generic archive"
 	name := run.Program
 	src, dst := x.Source, x.Destination
@@ -392,7 +393,7 @@ func (x Extractor) Generic(run Run, targets ...string) error {
 	defer os.Remove(srcInDst)
 
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
 	const size = 2
 	args := make([]string, size, size+len(targets))
@@ -416,39 +417,39 @@ func (x Extractor) Generic(run Run, targets ...string) error {
 //
 // Compressed tarballs signatures are determined by the compression method, not the tarball format.
 // For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
-func (x Extractor) checkSign(sign magicnumber.Signature, targets ...string) error {
+func (x Extractor) checkSign(ctx context.Context, sign magicnumber.Signature, targets ...string) error {
 	switch sign { //nolint:exhaustive
 	case magicnumber.GzipCompressArchive:
-		return x.Gzip(targets...)
+		return x.Gzip(ctx, targets...)
 	case
 		magicnumber.PKWAREZipReduce,
 		magicnumber.PKWAREZipShrink:
-		return x.ZipHW()
+		return x.ZipHW(ctx)
 	case
 		magicnumber.Bzip2CompressArchive,
 		magicnumber.MicrosoftCABinet,
 		magicnumber.TapeARchive,
 		magicnumber.XZCompressArchive,
 		magicnumber.ZStandardArchive:
-		return x.Tar(targets...)
+		return x.Tar(ctx, targets...)
 	case
 		magicnumber.PKWAREZip,
 		magicnumber.PKWAREZip64,
 		magicnumber.PKWAREZipImplode:
-		return x.Zips(targets...)
+		return x.Zips(ctx, targets...)
 	case magicnumber.ARChiveSEA:
-		return x.ARC(targets...)
+		return x.ARC(ctx, targets...)
 	case magicnumber.ArchiveRobertJung:
-		return x.ARJ(targets...)
+		return x.ARJ(ctx, targets...)
 	case
 		magicnumber.YoshiLHA,
 		magicnumber.NoGatePAK:
-		return x.Unar(targets...)
+		return x.Unar(ctx, targets...)
 	case magicnumber.RoshalARchive,
 		magicnumber.RoshalARchivev5:
-		return x.Rar(targets...)
+		return x.Rar(ctx, targets...)
 	case magicnumber.X7zCompressArchive:
-		return x.Zip7(targets...)
+		return x.Zip7(ctx, targets...)
 	}
 	return x.unknowns(sign)
 }
@@ -463,10 +464,10 @@ func (x Extractor) unknowns(sign magicnumber.Signature) error {
 }
 
 // ExtractAll extracts all files from the src archive file to the destination directory.
-func ExtractAll(src, dst string) error {
+func ExtractAll(ctx context.Context, src, dst string) error {
 	const format = "extract all: %w"
 	e := Extractor{Source: src, Destination: dst}
-	if err := e.Extract(); err != nil {
+	if err := e.Extract(ctx); err != nil {
 		return fmt.Errorf(format, err)
 	}
 	return nil
@@ -483,7 +484,7 @@ func ExtractAll(src, dst string) error {
 // using the func.
 //
 // The absolute path of the extracted archive is returned.
-func ExtractSource(src, name string) (string, error) {
+func ExtractSource(ctx context.Context, src, name string) (string, error) {
 	const format = "extract source cannot"
 	const mb150 = 150 * 1024 * 1024
 	if inf, err := os.Stat(src); err != nil {
@@ -524,7 +525,7 @@ func ExtractSource(src, name string) (string, error) {
 		}
 	case true:
 		// extract the archive
-		if err := ExtractAll(src, dst); err != nil {
+		if err := ExtractAll(ctx, src, dst); err != nil {
 			defer os.RemoveAll(dst)
 			return "", fmt.Errorf(format+" read extracted archive: %w", err)
 		}
@@ -548,7 +549,7 @@ func filearchive(src string) bool {
 
 // List returns the files within a 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
 // The filename extension is used to determine the archive format.
-func List(src, filename string) ([]string, error) {
+func List(ctx context.Context, src, filename string) ([]string, error) {
 	const format = "archive list %w"
 	inf, err := os.Stat(src)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -560,9 +561,9 @@ func List(src, filename string) ([]string, error) {
 	if inf.IsDir() {
 		return nil, fmt.Errorf(format+": %s", ErrFile, filepath.Base(src))
 	}
-	path, err := ExtractSource(src, filename)
+	path, err := ExtractSource(ctx, src, filename)
 	if err != nil {
-		return commander(src, filename)
+		return commander(ctx, src, filename)
 	}
 	var files []string
 	err = filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
@@ -587,13 +588,13 @@ func List(src, filename string) ([]string, error) {
 }
 
 // commander uses system archiver and decompression programs to read the src archive file.
-func commander(src, filename string) ([]string, error) {
+func commander(ctx context.Context, src, filename string) ([]string, error) {
 	cont := Content{
 		Ext:   "",
 		Files: []string{},
 	}
 	const format = "commander failed with %s (%q): %w"
-	if err := cont.Read(src); err != nil {
+	if err := cont.Read(ctx, src); err != nil {
 		return nil, fmt.Errorf(format, filename, cont.Ext, err)
 	}
 	// remove empty entries

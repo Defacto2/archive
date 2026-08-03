@@ -20,17 +20,18 @@ import (
 // should not be used!
 //
 // [7z program]: https://7-zip.org/
-func (c *Content) Zip7(src string) error {
+func (c *Content) Zip7(ctx context.Context, src string) error {
 	prog, err := exec.LookPath(command.Zip7)
 	const format = "content 7zip %w"
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
-	const list = "l"
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
+
+	const list = "l"
 	cmd := exec.CommandContext(ctx, prog, list, src)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
@@ -104,7 +105,7 @@ func not7zip(output []byte) bool {
 // should not be used!
 //
 // [7z program]: https://www.7-zip.org/
-func (x Extractor) Zip7(targets ...string) error {
+func (x Extractor) Zip7(ctx context.Context, targets ...string) error {
 	const format = "extract 7z %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Zip7)
@@ -116,14 +117,13 @@ func (x Extractor) Zip7(targets ...string) error {
 	}
 
 	// as the 7z program supports many archive formats, restrict it to 7z
-	if ext, err := MagicExt(src); err != nil {
+	if ext, err := MagicExt(ctx, src); err != nil {
 		return fmt.Errorf(format+": %s", err, src)
 	} else if ext != zip7x {
 		return fmt.Errorf(format+": %s", ErrExt, src)
 	}
 
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
 	const (
 		extract      = "x"    // x extract files without paths
@@ -142,6 +142,7 @@ func (x Extractor) Zip7(targets ...string) error {
 	args[5] = src
 	args = append(args, targets...)
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {

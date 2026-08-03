@@ -21,7 +21,7 @@ import (
 // The freeware version is the recommended program for extracting RAR archives.
 //
 // [unrar program]: https://www.rarlab.com/rar_add.htm
-func (c *Content) Rar(src string) error {
+func (c *Content) Rar(ctx context.Context, src string) error {
 	const format = "content unrar %w"
 	prog, err := exec.LookPath(command.Unrar)
 	if err != nil {
@@ -31,10 +31,10 @@ func (c *Content) Rar(src string) error {
 		listBrief  = "lb"
 		noComments = "-c-"
 	)
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, listBrief, "-ep", noComments, src)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
@@ -60,7 +60,7 @@ func (c *Content) Rar(src string) error {
 // The freeware version is the recommended program for extracting RAR archives.
 //
 // [unrar program]: https://www.rarlab.com/rar_add.htm
-func (x Extractor) Rar(targets ...string) error {
+func (x Extractor) Rar(ctx context.Context, targets ...string) error {
 	const format = "extract unrar %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unrar)
@@ -70,8 +70,7 @@ func (x Extractor) Rar(targets ...string) error {
 	if dst == "" {
 		return ErrDest
 	}
-	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutExtract)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
 	const (
 		eXtract      = "x"   // x extract files with full path
@@ -93,6 +92,7 @@ func (x Extractor) Rar(targets ...string) error {
 	args = append(args, targets...)
 	args = append(args, outputPath+dst)
 	cmd := exec.CommandContext(ctx, prog, args...)
+	var buf bytes.Buffer
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {

@@ -16,16 +16,15 @@ import (
 // but now using the [arc program] by Howard Chu.
 //
 // [arc program]: https://github.com/hyc/arc
-func (c *Content) ARC(src string) error {
+func (c *Content) ARC(ctx context.Context, src string) error {
 	const format = "content arc %w"
 	prog, err := exec.LookPath(command.Arc)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
+
 	const list = "l"
 	var buf bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
-	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, list, src)
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
@@ -86,8 +85,8 @@ func notArc(output []byte) bool {
 // If the targets are empty then all files are extracted.
 //
 // [arc program]: https://github.com/hyc/arc
-func (x Extractor) ARC(targets ...string) error {
-	return x.Generic(Run{
+func (x Extractor) ARC(ctx context.Context, targets ...string) error {
+	return x.Generic(ctx, Run{
 		Program: command.Arc,
 		Extract: "x",
 	}, targets...)

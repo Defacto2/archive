@@ -129,7 +129,7 @@ func CompressDir(root, dest string) (int64, error) {
 
 // Test runs the rezip test command on the named file. If the file is a directory
 // or empty, an error is returned. If the test command fails, an error is returned.
-func Test(name string) error {
+func Test(ctx context.Context, name string) error {
 	const format = "rezip test failed"
 	path, err := exec.LookPath(command.Unzip)
 	if err != nil {
@@ -145,7 +145,7 @@ func Test(name string) error {
 	if inf.Size() == 0 {
 		return fmt.Errorf(format+": %w: %s is empty", ErrTest, name)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutList)
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 	err = exec.CommandContext(ctx, path, testArg, name).Run()
 	if err != nil {
