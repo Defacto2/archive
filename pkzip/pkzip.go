@@ -175,7 +175,8 @@ func ExitStatus(err error) Diagnostic {
 func Methods(name string) ([]Compression, error) {
 	zipf, err := zip.OpenReader(name)
 	if err != nil {
-		return nil, fmt.Errorf("pkzip methods: %w", err)
+		const format = "pkzip methods: %w"
+		return nil, fmt.Errorf(format, err)
 	}
 	defer zipf.Close()
 	methods := []Compression{}
@@ -197,7 +198,8 @@ func Methods(name string) ([]Compression, error) {
 func Zip(name string) (bool, error) {
 	methods, err := Methods(name)
 	if err != nil {
-		return false, fmt.Errorf("pkzip deflate or store check: %w", err)
+		const format = "pkzip deflate or store check: %w"
+		return false, fmt.Errorf(format, err)
 	}
 	for _, method := range methods {
 		if !method.Zip() {

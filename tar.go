@@ -18,9 +18,10 @@ import (
 //
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 func (c *Content) Tar(src string) error {
+	const format = `content tar %w`
 	prog, err := exec.LookPath(command.BSDTar)
 	if err != nil {
-		return fmt.Errorf("content tar %w", err)
+		return fmt.Errorf(format, err)
 	}
 	const list = "-tf"
 	var buf bytes.Buffer
@@ -30,7 +31,7 @@ func (c *Content) Tar(src string) error {
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("content tar %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if len(out) == 0 {
 		return ErrRead
@@ -54,10 +55,11 @@ func (c *Content) Tar(src string) error {
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 // [libarchive library]: http://www.libarchive.org/
 func (x Extractor) Tar(targets ...string) error {
+	const format = `extract tar %w`
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.BSDTar)
 	if err != nil {
-		return fmt.Errorf("extract tar %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -87,9 +89,9 @@ func (x Extractor) Tar(targets ...string) error {
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf("extract tar %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
-		return fmt.Errorf("extract tar %w: %s", err, prog)
+		return fmt.Errorf(format+": %s", err, prog)
 	}
 	return nil
 }

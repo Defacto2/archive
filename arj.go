@@ -18,14 +18,15 @@ import (
 //
 // [arj program]: https://arj.sourceforge.net/
 func (c *Content) ARJ(src string) error {
+	const format = "content arj %w"
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
-		return fmt.Errorf("content arj %w", err)
+		return fmt.Errorf(format, err)
 	}
 
 	newname := src
 	if name, err := HardLink(arjx, src); err != nil {
-		return fmt.Errorf("content arj %w", err)
+		return fmt.Errorf(format, err)
 	} else if name != "" {
 		newname = name
 		defer os.Remove(name)
@@ -39,7 +40,7 @@ func (c *Content) ARJ(src string) error {
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("content arj %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if notArj(out) {
 		return ErrRead
@@ -90,7 +91,8 @@ func notArj(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
-	return bytes.Contains(output, []byte("is not an ARJ archive"))
+	const match = "is not an ARJ archive"
+	return bytes.Contains(output, []byte(match))
 }
 
 // ARJ extracts the targets from the source ARJ archive
@@ -99,6 +101,7 @@ func notArj(output []byte) bool {
 //
 // [arj program]: https://arj.sourceforge.net/
 func (x Extractor) ARJ(targets ...string) error {
+	const format = "extract arj %w"
 	src, dst := x.Source, x.Destination
 	if inf, err := os.Stat(dst); err != nil {
 		return fmt.Errorf("%w: %s", err, dst)
@@ -108,12 +111,12 @@ func (x Extractor) ARJ(targets ...string) error {
 	// note: only use arj, as unarj offers limited functionality
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
-		return fmt.Errorf("extract arj %w", err)
+		return fmt.Errorf(format, err)
 	}
 
 	newname := src
 	if name, err := HardLink(arjx, src); err != nil {
-		return fmt.Errorf("extract arj %w", err)
+		return fmt.Errorf(format, err)
 	} else if name != "" {
 		newname = name
 		defer os.Remove(name)
@@ -140,10 +143,10 @@ func (x Extractor) ARJ(targets ...string) error {
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf("extract arj %w: %s: %q",
+			return fmt.Errorf(format+": %s: %q",
 				ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
-		return fmt.Errorf("extract arj %w: %s", err, prog)
+		return fmt.Errorf(format+": %s", err, prog)
 	}
 	return nil
 }

@@ -82,10 +82,11 @@ func Lsar(data []byte) (string, []string, error) {
 //   - the unarchiver app: https://theunarchiver.com/
 //   - unar command line tool: https://theunarchiver.com/command-line
 func (x Extractor) Unar(targets ...string) error {
+	const fmtext = "extract unar %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unar)
 	if err != nil {
-		return fmt.Errorf("extract unar %w", err)
+		return fmt.Errorf(fmtext, err)
 	}
 	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
@@ -95,7 +96,7 @@ func (x Extractor) Unar(targets ...string) error {
 	if len(targets) > 0 {
 		args = append(args, targets...)
 	}
-	const format = `extract unar %w: %s: cmd errors: %q cmd out: %q`
+	const format = fmtext + `: %s: cmd errors: %q cmd out: %q`
 	// Usage: unar [options] archive [files ...]
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Stderr = &buf

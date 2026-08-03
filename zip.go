@@ -18,9 +18,10 @@ import (
 //
 // [zipinfo program]: https://infozip.sourceforge.net/
 func (c *Content) Zip(src string) error {
+	const format = "content zipinfo %w"
 	prog, err := exec.LookPath(command.ZipInfo)
 	if err != nil {
-		return fmt.Errorf("content zipinfo %w", err)
+		return fmt.Errorf(format, err)
 	}
 	const list = "-1"
 	var buf bytes.Buffer
@@ -40,7 +41,7 @@ func (c *Content) Zip(src string) error {
 			return nil
 		}
 		// otherwise the zipinfo threw an error
-		return fmt.Errorf("content zipinfo %w: %s", err, src)
+		return fmt.Errorf(format+": %s", err, src)
 	}
 	if len(out) == 0 {
 		return ErrRead
@@ -59,10 +60,11 @@ func (c *Content) Zip(src string) error {
 //
 // [unzip program]: https://www.linux.org/docs/man1/unzip.html
 func (x Extractor) Zip(targets ...string) error {
+	const format = "extract unzip %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unzip)
 	if err != nil {
-		return fmt.Errorf("extract unzip %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -97,9 +99,9 @@ func (x Extractor) Zip(targets ...string) error {
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf("extract unzip %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
-		return fmt.Errorf("extract unzip %w: %s", err, prog)
+		return fmt.Errorf(format+": %s", err, prog)
 	}
 	return nil
 }

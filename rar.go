@@ -22,9 +22,10 @@ import (
 //
 // [unrar program]: https://www.rarlab.com/rar_add.htm
 func (c *Content) Rar(src string) error {
+	const format = "content unrar %w"
 	prog, err := exec.LookPath(command.Unrar)
 	if err != nil {
-		return fmt.Errorf("content unrar %w", err)
+		return fmt.Errorf(format, err)
 	}
 	const (
 		listBrief  = "lb"
@@ -37,7 +38,7 @@ func (c *Content) Rar(src string) error {
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("content unrar %w: %s", err, src)
+		return fmt.Errorf(format+": %s", err, src)
 	}
 	if len(out) == 0 {
 		return ErrRead
@@ -60,10 +61,11 @@ func (c *Content) Rar(src string) error {
 //
 // [unrar program]: https://www.rarlab.com/rar_add.htm
 func (x Extractor) Rar(targets ...string) error {
+	const format = "extract unrar %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unrar)
 	if err != nil {
-		return fmt.Errorf("extract unrar %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -94,9 +96,9 @@ func (x Extractor) Rar(targets ...string) error {
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf("extract unrar %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
-		return fmt.Errorf("extract unrar %w: %s", err, prog)
+		return fmt.Errorf(format+": %s", err, prog)
 	}
 	return nil
 }

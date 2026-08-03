@@ -18,9 +18,10 @@ import (
 //
 // [gcab program]: https://man.archlinux.org/man/gcab.1.en
 func (c *Content) Cab(src string) error {
+	const format = "cab reader %w"
 	prog, err := exec.LookPath(command.Cab)
 	if err != nil {
-		return fmt.Errorf("cab reader %w", err)
+		return fmt.Errorf(format, err)
 	}
 	const list = "--list"
 	var buf bytes.Buffer
@@ -30,9 +31,10 @@ func (c *Content) Cab(src string) error {
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("cab output %w", err)
+		return fmt.Errorf(format, err)
 	}
-	if len(out) == 0 || bytes.Contains(out, []byte("The input is not of cabinet format")) {
+	const match = "The input is not of cabinet format"
+	if len(out) == 0 || bytes.Contains(out, []byte(match)) {
 		return ErrRead
 	}
 	for name := range strings.Lines(string(out)) {

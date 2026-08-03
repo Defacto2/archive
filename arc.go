@@ -17,9 +17,10 @@ import (
 //
 // [arc program]: https://github.com/hyc/arc
 func (c *Content) ARC(src string) error {
+	const format = "content arc %w"
 	prog, err := exec.LookPath(command.Arc)
 	if err != nil {
-		return fmt.Errorf("content arc %w", err)
+		return fmt.Errorf(format, err)
 	}
 	const list = "l"
 	var buf bytes.Buffer
@@ -29,7 +30,7 @@ func (c *Content) ARC(src string) error {
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("content arc %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if notArc(out) {
 		return ErrRead
@@ -75,7 +76,8 @@ func notArc(output []byte) bool {
 		return true
 	}
 	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
-	return bytes.Contains(p, []byte("has a bad header"))
+	const match = "has a bad header"
+	return bytes.Contains(p, []byte(match))
 }
 
 // ARC extracts the content of the ARC archive.

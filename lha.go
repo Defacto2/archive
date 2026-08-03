@@ -19,9 +19,10 @@ import (
 //
 // [lha program]: https://fragglet.github.io/lhasa/
 func (c *Content) LHA(src string) error {
+	const format = "content lha %w"
 	prog, err := exec.LookPath(command.Lha)
 	if err != nil {
-		return fmt.Errorf("content lha %w", err)
+		return fmt.Errorf(format, err)
 	}
 
 	const list = "-l"
@@ -33,7 +34,7 @@ func (c *Content) LHA(src string) error {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("content lha %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if notLHA(out) {
 		return ErrRead
@@ -92,7 +93,8 @@ func notLHA(output []byte) bool {
 		return true
 	}
 	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
-	return bytes.Contains(p, []byte("Total 0 files 0"))
+	const match = "Total 0 files 0"
+	return bytes.Contains(p, []byte(match))
 }
 
 // LHA extracts the targets from the source LHA/LZH archive.
@@ -103,10 +105,11 @@ func notLHA(output []byte) bool {
 //
 // [lha program]: https://fragglet.github.io/lhasa/
 func (x Extractor) LHA(targets ...string) error {
+	const format = "extract lha %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Lha)
 	if err != nil {
-		return fmt.Errorf("extract lha %w", err)
+		return fmt.Errorf(format, err)
 	}
 	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), command.TimeoutDefunct)
@@ -139,9 +142,9 @@ func (x Extractor) LHA(targets ...string) error {
 	out, err := cmd.Output()
 	if err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf("extract lha %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
-		return fmt.Errorf("extract lha %w: %s", err, prog)
+		return fmt.Errorf(format+": %s", err, prog)
 	}
 	if len(out) == 0 {
 		return ErrRead

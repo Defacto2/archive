@@ -22,8 +22,9 @@ import (
 // [7z program]: https://7-zip.org/
 func (c *Content) Zip7(src string) error {
 	prog, err := exec.LookPath(command.Zip7)
+	const format = "content 7zip %w"
 	if err != nil {
-		return fmt.Errorf("content 7zip %w", err)
+		return fmt.Errorf(format, err)
 	}
 	const list = "l"
 	var buf bytes.Buffer
@@ -33,7 +34,7 @@ func (c *Content) Zip7(src string) error {
 	cmd.Stderr = &buf
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("content 7zip %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if not7zip(out) {
 		return ErrRead
@@ -90,7 +91,8 @@ func not7zip(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
-	return !bytes.Contains(output, []byte("Type = 7z"))
+	const match = "Type = 7z"
+	return !bytes.Contains(output, []byte(match))
 }
 
 // Zip7 extracts the targets from the source 7z archive
@@ -103,10 +105,11 @@ func not7zip(output []byte) bool {
 //
 // [7z program]: https://www.7-zip.org/
 func (x Extractor) Zip7(targets ...string) error {
+	const format = "extract 7z %w"
 	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Zip7)
 	if err != nil {
-		return fmt.Errorf("extract 7z %w", err)
+		return fmt.Errorf(format, err)
 	}
 	if dst == "" {
 		return ErrDest
@@ -114,9 +117,9 @@ func (x Extractor) Zip7(targets ...string) error {
 
 	// as the 7z program supports many archive formats, restrict it to 7z
 	if ext, err := MagicExt(src); err != nil {
-		return fmt.Errorf("extract 7z %w: %s", err, src)
+		return fmt.Errorf(format+": %s", err, src)
 	} else if ext != zip7x {
-		return fmt.Errorf("extract 7z %w: %s", ErrExt, src)
+		return fmt.Errorf(format+": %s", ErrExt, src)
 	}
 
 	var buf bytes.Buffer
@@ -142,9 +145,9 @@ func (x Extractor) Zip7(targets ...string) error {
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf("extract 7z %w: %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
-		return fmt.Errorf("extract 7z %w: %s", err, prog)
+		return fmt.Errorf(format+": %s", err, prog)
 	}
 	return nil
 }
