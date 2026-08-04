@@ -95,7 +95,7 @@ func (x Extractor) Unar(ctx context.Context, targets ...string) error {
 	if len(targets) > 0 {
 		args = append(args, targets...)
 	}
-	const format = fmtext + `: %s: cmd errors: %q cmd out: %q`
+	const format = fmtext + `: %s: cmd errors: '%s' cmd out: '%s'`
 	// Usage: unar [options] archive [files ...]
 	cmd := exec.CommandContext(ctx, prog, args...)
 	var buf bytes.Buffer

@@ -30,16 +30,24 @@ var ErrTest = errors.New("rezip test failed")
 //
 // The dest must be a valid file path and should include the .zip extension.
 // If the dest file already exists, an error is returned.
-func Compress(name, dest string) (int, error) {
+func Compress(name, dest string) (count int, err error) {
 	const format = "rezip compress failed to "
 	zipfile, err := os.OpenFile(dest, createUnique, helper.WriteWriteRead)
 	if err != nil {
 		return 0, fmt.Errorf(format+"open file: %w", err)
 	}
-	defer zipfile.Close()
+	defer func() {
+		if cErr := zipfile.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+"close dest file: %w", cErr))
+		}
+	}()
 
 	deflater := zip.NewWriter(zipfile)
-	defer deflater.Close()
+	defer func() {
+		if cErr := deflater.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+"close zip writer: %w", cErr))
+		}
+	}()
 
 	dst, err := deflater.Create(filepath.Base(name))
 	if err != nil {
@@ -49,7 +57,11 @@ func Compress(name, dest string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf(format+"open file: %w", err)
 	}
-	defer src.Close()
+	defer func() {
+		if cErr := src.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+"close source file: %w", cErr))
+		}
+	}()
 
 	const size = 64 * 1024
 	buf := make([]byte, size)
@@ -57,6 +69,7 @@ func Compress(name, dest string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf(format+"copy file: %w", err)
 	}
+
 	return int(n), nil
 }
 
@@ -66,22 +79,34 @@ func Compress(name, dest string) (int, error) {
 //
 // The dest must be a valid file path and should include the .zip extension.
 // If the dest file already exists, an error is returned.
-func CompressDir(root, dest string) (int64, error) {
+func CompressDir(root, dest string) (count int64, err error) { //nolint:funlen
 	const format = "rezip compress dir"
 	zipfile, err := os.OpenFile(dest, createUnique, helper.WriteWriteRead)
 	if err != nil {
 		return 0, fmt.Errorf(format+" failed to open file: %w", err)
 	}
-	defer zipfile.Close()
+	defer func() {
+		if cErr := zipfile.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+"close dest file: %w", cErr))
+		}
+	}()
 
 	deflater := zip.NewWriter(zipfile)
-	defer deflater.Close()
+	defer func() {
+		if cErr := deflater.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+"close zip writer: %w", cErr))
+		}
+	}()
 
 	osr, err := os.OpenRoot(root)
 	if err != nil {
 		return 0, fmt.Errorf(format+" failed to open root: %w", err)
 	}
-	defer osr.Close()
+	defer func() {
+		if cErr := osr.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+"failed to close root: %w", cErr))
+		}
+	}()
 
 	var written int64
 	addFile := func(path string, info os.FileInfo, err error) error {
@@ -107,7 +132,11 @@ func CompressDir(root, dest string) (int64, error) {
 		if err != nil {
 			return fmt.Errorf(format, err)
 		}
-		defer src.Close()
+		defer func() {
+			if cErr := src.Close(); cErr != nil {
+				err = errors.Join(err, fmt.Errorf(format, cErr))
+			}
+		}()
 
 		const size = 64 * 1024
 		buf := make([]byte, size)

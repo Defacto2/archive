@@ -172,24 +172,28 @@ func ExitStatus(err error) Diagnostic {
 }
 
 // Methods returns the PKZip compression methods used in the named file.
-func Methods(name string) ([]Compression, error) {
+func Methods(name string) (methods []Compression, err error) {
+	const format = "pkzip methods: %w"
 	zipf, err := zip.OpenReader(name)
 	if err != nil {
-		const format = "pkzip methods: %w"
 		return nil, fmt.Errorf(format, err)
 	}
-	defer zipf.Close()
-	methods := []Compression{}
+	defer func() {
+		if cErr := zipf.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format, cErr))
+		}
+	}()
+	comp := []Compression{}
 	for _, file := range zipf.File {
 		fh := file.FileHeader
 		const encrypted = 0x1
 		if locked := fh.Flags&encrypted != 0; locked {
 			return nil, ErrPassParse
 		}
-		methods = append(methods, Compression(fh.Method))
+		comp = append(comp, Compression(fh.Method))
 	}
-	slices.Sort(methods)
-	return slices.Compact(methods), nil
+	slices.Sort(comp)
+	return slices.Compact(comp), nil
 }
 
 // Zip returns true if the named file is a PKZip file that exclusively

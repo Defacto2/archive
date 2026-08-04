@@ -41,6 +41,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -145,7 +146,7 @@ func MagicExt(ctx context.Context, src string) (string, error) {
 			return ext, nil
 		}
 	}
-	return "", fmt.Errorf(format+" %w: %q", ErrExt, magic)
+	return "", fmt.Errorf(format+" %w: '%s'", ErrExt, magic)
 }
 
 // foundLHA returns true if the LHA file type is matched in the magic string.
@@ -215,7 +216,14 @@ func (c *Content) Read(ctx context.Context, src string) error {
 }
 
 func (c *Content) readers(ctx context.Context, src, ext string) error {
-	const format = "content read %w: %q"
+	const format = "content read %w: '%s'"
+	strictViolation := runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
+	if strictViolation {
+		switch strings.ToLower(ext) {
+		case arjx, rarx:
+			return c.Lsar(ctx, src)
+		}
+	}
 	switch strings.ToLower(ext) {
 	case zip7x:
 		return c.Zip7(ctx, src)
@@ -255,7 +263,7 @@ func (c *Content) readers(ctx context.Context, src, ext string) error {
 func HardLink(require, src string) (string, error) {
 	const format = "hardlink "
 	if filepath.Ext(require) == "" {
-		return "", fmt.Errorf(format+"require %w %q", ErrHLExt, require)
+		return "", fmt.Errorf(format+"require %w '%s'", ErrHLExt, require)
 	}
 	if strings.EqualFold(filepath.Ext(src), require) {
 		return "", nil
@@ -308,14 +316,18 @@ type Extractor struct {
 //
 // Some archive formats that could be implemented if needed in the future,
 // "freearc", "zoo".
-func (x Extractor) Extract(ctx context.Context, targets ...string) error {
+func (x Extractor) Extract(ctx context.Context, targets ...string) (err error) {
 	const format = "extractor extract"
-	r, err := os.Open(x.Source)
+	file, err := os.Open(x.Source)
 	if err != nil {
 		return fmt.Errorf(format+" open %w", err)
 	}
-	defer r.Close()
-	sign, err := magicnumber.Archive(r)
+	defer func() {
+		if cErr := file.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+" could not close %w", cErr))
+		}
+	}()
+	sign, err := magicnumber.Archive(file)
 	if err != nil {
 		return fmt.Errorf(format+" magic %w", err)
 	}
@@ -371,7 +383,7 @@ type Run struct {
 // To work around this, Generic copies the source archive
 // to the destination directory, uses that as the working directory
 // and extracts the files. The copied source archive is then removed.
-func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) error {
+func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) (err error) {
 	const format = "generic archive"
 	name := run.Program
 	src, dst := x.Source, x.Destination
@@ -390,7 +402,11 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) erro
 	if _, err := helper.Duplicate(src, srcInDst); err != nil {
 		return fmt.Errorf(format+" %s duplicate %w", name, err)
 	}
-	defer os.Remove(srcInDst)
+	defer func() {
+		if cErr := os.Remove(srcInDst); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+" %w", cErr))
+		}
+	}()
 
 	var buf bytes.Buffer
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
@@ -405,7 +421,7 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) erro
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf(format+" %s %w: %s: %q", name,
+			return fmt.Errorf(format+" %s %w: %s: '%s'", name,
 				ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf(format+" %s %w: %s", name, err, prog)
@@ -418,6 +434,15 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) erro
 // Compressed tarballs signatures are determined by the compression method, not the tarball format.
 // For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
 func (x Extractor) checkSign(ctx context.Context, sign magicnumber.Signature, targets ...string) error {
+	if AccessViolation() {
+		switch sign {
+		case
+			magicnumber.ArchiveRobertJung,
+			magicnumber.RoshalARchive,
+			magicnumber.RoshalARchivev5:
+			return x.Unar(ctx, targets...)
+		}
+	}
 	switch sign { //nolint:exhaustive
 	case magicnumber.GzipCompressArchive:
 		return x.Gzip(ctx, targets...)
@@ -454,6 +479,10 @@ func (x Extractor) checkSign(ctx context.Context, sign magicnumber.Signature, ta
 	return x.unknowns(sign)
 }
 
+func AccessViolation() bool {
+	return runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
+}
+
 func (x Extractor) unknowns(sign magicnumber.Signature) error {
 	switch sign { //nolint:exhaustive
 	case magicnumber.Unknown:
@@ -484,8 +513,8 @@ func ExtractAll(ctx context.Context, src, dst string) error {
 // using the func.
 //
 // The absolute path of the extracted archive is returned.
-func ExtractSource(ctx context.Context, src, name string) (string, error) {
-	const format = "extract source cannot"
+func ExtractSource(ctx context.Context, src, name string) (abs string, err error) {
+	const format = "extract source archive"
 	const mb150 = 150 * 1024 * 1024
 	if inf, err := os.Stat(src); err != nil {
 		return "", fmt.Errorf(format+" stat file: %w", err)
@@ -496,7 +525,7 @@ func ExtractSource(ctx context.Context, src, name string) (string, error) {
 	}
 	dst, err := helper.MkContent(src)
 	if err != nil {
-		return "", fmt.Errorf(format+" create content directory: %w", err)
+		return "", fmt.Errorf(format+" cannot create content directory: %w", err)
 	}
 	// NOTE: os.ReadDir doesn't behave correctly with archives that
 	// contain a single directory in the root, so use a custom walker.
@@ -515,36 +544,55 @@ func ExtractSource(ctx context.Context, src, name string) (string, error) {
 	if entries >= extracted {
 		return dst, nil
 	}
-	switch filearchive(src) {
+	ok, cErr := filearchive(src)
+	if cErr != nil {
+		err = errors.Join(err, fmt.Errorf(format+": %w", cErr))
+	}
+	switch ok {
 	case false:
 		// copy the file
 		newpath := filepath.Join(dst, name)
-		if _, err := helper.DuplicateOW(src, newpath); err != nil {
-			defer os.RemoveAll(dst)
-			return "", fmt.Errorf(format+" duplicate file: %w", err)
+		if _, cErr := helper.DuplicateOW(src, newpath); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+" cannot duplicate file: %w", cErr))
 		}
 	case true:
 		// extract the archive
-		if err := ExtractAll(ctx, src, dst); err != nil {
-			defer os.RemoveAll(dst)
-			return "", fmt.Errorf(format+" read extracted archive: %w", err)
+		if cErr := ExtractAll(ctx, src, dst); cErr != nil {
+			return "", fmt.Errorf(format+" cannot read extracted archive: %w", cErr)
 		}
+	}
+	defer func() {
+		if cErr := os.RemoveAll(dst); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format+": %w", cErr))
+		}
+	}()
+	if err != nil {
+		return "", err
 	}
 	return dst, nil
 }
 
 // filearchive confirms whether the src file is a supported archive file.
-func filearchive(src string) bool {
-	r, err := os.Open(src)
+func filearchive(src string) (ok bool, err error) {
+	file, err := os.Open(src)
 	if err != nil {
-		return false
+		return false, nil
 	}
-	defer r.Close()
-	sign, err := magicnumber.Archive(r)
+	defer func() {
+		if cErr := file.Close(); err != nil {
+			err = errors.Join(err, cErr)
+		}
+	}()
+	sign, err := magicnumber.Archive(file)
 	if err != nil {
-		return false
+		return false, nil
 	}
-	return sign != magicnumber.Unknown
+	ok = sign != magicnumber.Unknown
+	if err != nil {
+		const format = "supported file archive: %w"
+		return ok, fmt.Errorf(format, err)
+	}
+	return ok, nil
 }
 
 // List returns the files within a 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
@@ -593,7 +641,7 @@ func commander(ctx context.Context, src, filename string) ([]string, error) {
 		Ext:   "",
 		Files: []string{},
 	}
-	const format = "commander failed with %s (%q): %w"
+	const format = "commander failed with %s (ext: %s): %w"
 	if err := cont.Read(ctx, src); err != nil {
 		return nil, fmt.Errorf(format, filename, cont.Ext, err)
 	}

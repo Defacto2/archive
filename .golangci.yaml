@@ -2,6 +2,7 @@ version: '2'
 linters:
   default: all
   disable:
+    - nonamedreturns
     - depguard
     - gomodguard
     - nlreturn
@@ -14,6 +15,8 @@ linters:
       max-complexity: 15
     misspell:
       locale: US
+    nonamedreturns:
+      report-error-in-defer: true
   exclusions:
     generated: lax
     presets:

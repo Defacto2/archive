@@ -3,6 +3,7 @@ package archive
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -76,13 +77,17 @@ func GzipName(src string) string {
 //
 // This is slower than other read methods as the tarball archive is
 // first decompressed to a temporary directory before being read.
-func (c *Content) readTarball(ctx context.Context, src string) error {
+func (c *Content) readTarball(ctx context.Context, src string) (err error) {
 	const format = "read tarball %w"
 	tmp, err := helper.MkContent(src)
 	if err != nil {
 		return fmt.Errorf(format, err)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() {
+		if cErr := os.RemoveAll(tmp); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format, cErr))
+		}
+	}()
 	x := Extractor{
 		Source:      src,
 		Destination: tmp,
@@ -107,7 +112,11 @@ func (c *Content) readTarball(ctx context.Context, src string) error {
 		return nil
 	}
 	c.Ext = tarx
-	defer os.Remove(name)
+	defer func() {
+		if cErr := os.Remove(name); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format, err))
+		}
+	}()
 	return c.Tar(ctx, name)
 }
 

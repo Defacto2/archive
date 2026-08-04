@@ -3,6 +3,7 @@ package archive
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,7 +18,7 @@ import (
 // The format credited to Robert Jung using the [arj program].
 //
 // [arj program]: https://arj.sourceforge.net/
-func (c *Content) ARJ(ctx context.Context, src string) error {
+func (c *Content) ARJ(ctx context.Context, src string) (err error) {
 	const format = "content arj %w"
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
@@ -25,11 +26,17 @@ func (c *Content) ARJ(ctx context.Context, src string) error {
 	}
 
 	newname := src
-	if name, err := HardLink(arjx, src); err != nil {
+	name, err := HardLink(arjx, src)
+	if err != nil {
 		return fmt.Errorf(format, err)
-	} else if name != "" {
+	}
+	if name != "" {
 		newname = name
-		defer os.Remove(name)
+		defer func() {
+			if cErr := os.Remove(name); cErr != nil {
+				err = errors.Join(err, fmt.Errorf(format, err))
+			}
+		}()
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
@@ -116,11 +123,17 @@ func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
 	}
 
 	newname := src
-	if name, err := HardLink(arjx, src); err != nil {
+	name, err := HardLink(arjx, src)
+	if err != nil {
 		return fmt.Errorf(format, err)
-	} else if name != "" {
+	}
+	if name != "" {
 		newname = name
-		defer os.Remove(name)
+		defer func() {
+			if cErr := os.Remove(name); cErr != nil {
+				err = errors.Join(err, fmt.Errorf(format, err))
+			}
+		}()
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
@@ -144,7 +157,7 @@ func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
 	cmd.Stderr = &buf
 	if err = cmd.Run(); err != nil {
 		if buf.String() != "" {
-			return fmt.Errorf(format+": %s: %q",
+			return fmt.Errorf(format+": %s: '%s'",
 				ErrProg, prog, strings.TrimSpace(buf.String()))
 		}
 		return fmt.Errorf(format+": %s", err, prog)

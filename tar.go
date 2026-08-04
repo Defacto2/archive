@@ -3,6 +3,7 @@ package archive
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -99,8 +100,13 @@ func (x Extractor) Tar(ctx context.Context, targets ...string) error {
 }
 
 // TempTar functions like Tar but removes the source tarball after extraction.
-func (x Extractor) TempTar(ctx context.Context, targets ...string) error {
+func (x Extractor) TempTar(ctx context.Context, targets ...string) (err error) {
 	tarball := x.Source
-	defer os.Remove(tarball)
+	defer func() {
+		if cErr := os.Remove(tarball); cErr != nil {
+			const format = "cannot remove temptar: %w"
+			err = errors.Join(err, fmt.Errorf(format, cErr))
+		}
+	}()
 	return x.Tar(ctx, targets...)
 }
