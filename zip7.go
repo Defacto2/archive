@@ -21,67 +21,92 @@ import (
 //
 // [7z program]: https://7-zip.org/
 func (c *Content) Zip7(ctx context.Context, src string) error {
+	const format = "content 7zip %s %w"
 	prog, err := exec.LookPath(command.Zip7)
-	const format = "content 7zip %w"
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 
+	// use "--" to prevent filenames starting with "-" from being parsed as 7z flags
 	const list = "l"
-	cmd := exec.CommandContext(ctx, prog, list, src)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
+	const stopParsing = "--"
+	cmd := exec.CommandContext(ctx, prog, list, stopParsing, src)
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf(format, err)
+		if ctx.Err() != nil {
+			return fmt.Errorf(format, "timeout", ctx.Err())
+		}
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf(format, "exec: "+stderrStr, err)
+		}
+		return fmt.Errorf(format, "exec", err)
 	}
+
 	if not7zip(out) {
 		return ErrRead
 	}
-	c.Files = zip7files(out)
+
+	c.Files = Zip7s(out)
 	c.Ext = zip7x
 	return nil
 }
 
-// zip7files parses the output of the 7z list command and returns the listed filenames.
-func zip7files(out []byte) []string {
-	//    Date      Time    Attr         Size   Compressed  Name
-	// ------------------- ----- ------------ ------------  ------------------------
-	// 2025-02-15 00:21:10 ....A         2009        20465  TESTDAT1.TXT
-	// 2025-02-15 00:17:34 ....A          469               TESTDAT2.TXT
-	// 2025-02-15 00:21:02 ....A        81410               TESTDAT3.TXT
-	// ------------------- ----- ------------ ------------  ------------------------
-	// 2025-02-15 00:21:10              83888        20465  3 files
+// Zip7s parses the output of the 7z list command and returns the listed filenames.
+func Zip7s(out []byte) []string {
+	var files []string
+	listTable := false
+	listIndex := -1
 
-	const tableEnd = 2
-	skip1 := []byte("   Date      Time  ")
-	skip2 := []byte("-------------------")
-	const padd = len("------------------- ----- ------------ ------------  ")
-	files := []string{}
-	skipped := 0
-	for line := range bytes.Lines(out) {
-		if bytes.HasPrefix(line, skip1) {
-			skipped++
+	for s := range bytes.Lines(out) {
+		line := string(s)
+		trimmed := strings.TrimSpace(line)
+
+		// find the table header line and the exact column start of "Name"
+		const substr = "Name"
+		if strings.HasPrefix(trimmed, "Date") && strings.Contains(trimmed, substr) {
+			listIndex = strings.Index(line, substr)
 			continue
 		}
-		if bytes.HasPrefix(line, skip2) {
-			skipped++
+
+		const prefix = "-------------------"
+		if strings.HasPrefix(trimmed, prefix) {
+			if !listTable && listIndex != -1 {
+				listTable = true // entering file list
+			} else if listTable {
+				break // at the end of the separator line
+			}
 			continue
 		}
-		if skipped == 0 {
-			continue
+
+		// parse the table rows
+		if listTable && listIndex != -1 {
+			if len(line) <= listIndex {
+				continue
+			}
+
+			// skip directory entries (marked with 'D' in Attr column)
+			// the attr column is typically between index 20 and 25
+			const directory = "D"
+			if len(line) >= 25 && strings.Contains(line[20:25], directory) {
+				continue
+			}
+
+			name := strings.TrimRight(line[listIndex:], "\r\n")
+			if name != "" {
+				files = append(files, name)
+			}
 		}
-		if skipped > tableEnd {
-			return files
-		}
-		if len(line) < padd {
-			continue
-		}
-		file := string(line[padd:])
-		files = append(files, strings.TrimSpace(file))
 	}
+
 	return files
 }
 
@@ -92,8 +117,7 @@ func not7zip(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
-	const match = "Type = 7z"
-	return !bytes.Contains(output, []byte(match))
+	return !bytes.Contains(output, []byte("Type = 7z"))
 }
 
 // Zip7 extracts the targets from the source 7z archive
@@ -106,49 +130,58 @@ func not7zip(output []byte) bool {
 //
 // [7z program]: https://www.7-zip.org/
 func (x Extractor) Zip7(ctx context.Context, targets ...string) error {
-	const format = "extract 7z %w"
+	const format = "extract 7z %s %w"
+
 	src, dst := x.Source, x.Destination
-	prog, err := exec.LookPath(command.Zip7)
-	if err != nil {
-		return fmt.Errorf(format, err)
-	}
 	if dst == "" {
 		return ErrDest
 	}
 
-	// as the 7z program supports many archive formats, restrict it to 7z
-	if ext, err := MagicExt(ctx, src); err != nil {
-		return fmt.Errorf(format+": %s", err, src)
+	prog, err := exec.LookPath(command.Zip7)
+	if err != nil {
+		return fmt.Errorf(format, "look path", err)
+	}
+
+	// restrict extraction strictly to 7z magic format
+	ext, err := MagicExt(ctx, src)
+	if err != nil {
+		return fmt.Errorf(format, "magic check "+src, err)
 	} else if ext != zip7x {
-		return fmt.Errorf(format+": %s", ErrExt, src)
+		return fmt.Errorf(format, "magic check "+src, ErrExt)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
+
 	const (
-		extract      = "x"    // x extract files without paths
-		overwrite    = "-aoa" // -aoa overwrite all
-		quiet        = "-bb0" // -bb0 quiet
-		targetDir    = "-o"   // -o output directory
-		yes          = "-y"   // -y assume yes to all queries
-		zip7ArgsBase = 6      // base number of args before targets
+		extract     = "e"    // e extracts files
+		extractFull = "x"    // x extracts files with full directory paths
+		overwrite   = "-aoa" // -aoa overwrite all existing files
+		quiet       = "-bb0" // -bb0 quiet mode
+		targetDir   = "-o"   // -o output directory
+		yes         = "-y"   // -y assume yes on all queries
+		stopSwitch  = "--"   // -- stop parsing switches [required]
 	)
-	args := make([]string, zip7ArgsBase, zip7ArgsBase+len(targets))
-	args[0] = extract
-	args[1] = overwrite
-	args[2] = quiet
-	args[3] = yes
-	args[4] = targetDir + dst
-	args[5] = src
-	args = append(args, targets...)
-	cmd := exec.CommandContext(ctx, prog, args...)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
-	if err = cmd.Run(); err != nil {
-		if buf.String() != "" {
-			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+	const size = 7
+	arg := make([]string, 0, size+len(targets))
+	arg = append(arg, extractFull, overwrite, quiet, yes, targetDir+dst, stopSwitch, src)
+	arg = append(arg, targets...)
+
+	cmd := exec.CommandContext(ctx, prog, arg...)
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("extract 7z timeout: %w", ctx.Err())
 		}
-		return fmt.Errorf(format+": %s", err, prog)
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf("extract 7z exec %s %s: %w (%s)", prog, src, ErrProg, stderrStr)
+		}
+		return fmt.Errorf("extract 7z exec %s %s: %w", prog, src, err)
 	}
+
 	return nil
 }

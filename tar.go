@@ -19,32 +19,54 @@ import (
 //
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 func (c *Content) Tar(ctx context.Context, src string) error {
-	const format = `content tar %w`
+	const format = `content tar %s %w`
 	prog, err := exec.LookPath(command.BSDTar)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 
-	const list = "-tf"
-	cmd := exec.CommandContext(ctx, prog, list, src)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
+	const list = "-t"
+	const location = "-f"
+	cmd := exec.CommandContext(ctx, prog, list, location, src)
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf(format, err)
+		if ctx.Err() != nil {
+			return fmt.Errorf("content tar %s timeout: %w", src, ctx.Err())
+		}
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf(format, "exec "+src+": "+stderrStr, err)
+		}
+		return fmt.Errorf(format, "exec "+src, err)
 	}
+
 	if len(out) == 0 {
 		return ErrRead
 	}
-	c.Files = strings.Split(string(out), "\n")
-	c.Files = slices.DeleteFunc(c.Files, func(s string) bool {
-		return strings.TrimSpace(s) == ""
-	})
+
+	c.Files = BSDTar(out)
 	c.Ext = tarx
 	return nil
+}
+
+// BSDTar splits raw tar -tf output into clean, normalized filenames.
+func BSDTar(out []byte) []string {
+	files := strings.Split(string(out), "\n")
+	files = slices.DeleteFunc(files, func(s string) bool {
+		return strings.TrimSpace(s) == ""
+	})
+	for i, f := range files {
+		files[i] = strings.TrimRight(f, "\r")
+	}
+	return files
 }
 
 // Tar extracts the content of the Tar archive using the [bsdtar program].
@@ -58,55 +80,71 @@ func (c *Content) Tar(ctx context.Context, src string) error {
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 // [libarchive library]: http://www.libarchive.org/
 func (x Extractor) Tar(ctx context.Context, targets ...string) error {
-	const format = `extract tar %w`
+	const format = `extract tar %s %w`
+
 	src, dst := x.Source, x.Destination
-	prog, err := exec.LookPath(command.BSDTar)
-	if err != nil {
-		return fmt.Errorf(format, err)
-	}
 	if dst == "" {
 		return ErrDest
 	}
+
+	prog, err := exec.LookPath(command.BSDTar)
+	if err != nil {
+		return fmt.Errorf(format, "look path", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
+
 	// note: BSD tar uses different flags to GNU tar
 	const (
-		extract     = "-x"                    // -x extract files
-		source      = "--file"                // -f file path to extract
-		targetDir   = "--cd"                  // -C target directory
-		noAcls      = "--no-acls"             // --no-acls
-		noFlags     = "--no-fflags"           // --no-fflags
-		noModTime   = "--modification-time"   // --modification-time
-		noSafeW     = "--no-safe-writes"      // --no-safe-writes
-		noOwner     = "--no-same-owner"       // --no-same-owner
-		noPerms     = "--no-same-permissions" // --no-same-permissions
-		noXattrs    = "--no-xattrs"           // --no-xattrs
-		tarArgsBase = 12                      // base args before targets
+		extract    = "-x"                    // -x extract files
+		source     = "--file"                // --file path to archive
+		targetDir  = "--cd"                  // --cd target directory
+		noAcls     = "--no-acls"             // --no-acls disable ACLs
+		noFlags    = "--no-fflags"           // --no-fflags disable file flags
+		noModTime  = "--modification-time"   // --modification-time
+		noSafeW    = "--no-safe-writes"      // --no-safe-writes
+		noOwner    = "--no-same-owner"       // --no-same-owner
+		noPerms    = "--no-same-permissions" // --no-same-permissions
+		noXattrs   = "--no-xattrs"           // --no-xattrs disable extended attributes
+		stopSwitch = "--"                    // -- stop parsing switches
 	)
-	args := make([]string, 0, tarArgsBase+len(targets))
-	args = append(args, extract, source, src, noAcls, noFlags, noSafeW, noModTime,
-		noOwner, noPerms, noXattrs, targetDir, dst)
-	args = append(args, targets...)
-	cmd := exec.CommandContext(ctx, prog, args...)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
-	if err = cmd.Run(); err != nil {
-		if buf.String() != "" {
-			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+
+	const size = 13
+	arg := make([]string, 0, size+len(targets))
+	arg = append(arg, extract, source, src, noAcls, noFlags, noSafeW, noModTime,
+		noOwner, noPerms, noXattrs, targetDir, dst, stopSwitch)
+	arg = append(arg, targets...)
+
+	cmd := exec.CommandContext(ctx, prog, arg...)
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf(format, "timeout", ctx.Err())
 		}
-		return fmt.Errorf(format+": %s", err, prog)
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf(format, "exec: "+stderrStr, err)
+		}
+		return fmt.Errorf(format, "exec", err)
 	}
+
 	return nil
 }
 
 // TempTar functions like Tar but removes the source tarball after extraction.
 func (x Extractor) TempTar(ctx context.Context, targets ...string) (err error) {
 	tarball := x.Source
-	defer func() {
-		if cErr := os.Remove(tarball); cErr != nil {
-			const format = "cannot remove temptar: %w"
-			err = errors.Join(err, fmt.Errorf(format, cErr))
-		}
-	}()
+	if tarball != "" {
+		defer func() {
+			if cErr := os.Remove(tarball); cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
+				const format = "cannot remove temptar: %w"
+				err = errors.Join(err, fmt.Errorf(format, cErr))
+			}
+		}()
+	}
 	return x.Tar(ctx, targets...)
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/Defacto2/archive/command"
 )
@@ -17,66 +18,96 @@ import (
 //
 // [arc program]: https://github.com/hyc/arc
 func (c *Content) ARC(ctx context.Context, src string) error {
-	const format = "content arc %w"
+	const format = "context arc %s %w"
 	prog, err := exec.LookPath(command.Arc)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
+	defer cancel()
+
 	const list = "l"
-	var buf bytes.Buffer
 	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &buf
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf(format, err)
+		if ctx.Err() != nil {
+			return fmt.Errorf(format, "timeout", ctx.Err())
+		}
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf(format, "exec "+src+": "+stderrStr, err)
+		}
+		return fmt.Errorf(format, "exec "+src, err)
 	}
+
 	if notArc(out) {
 		return ErrRead
 	}
-	c.Files = arcFiles(out)
+
+	c.Files = ARCs(out)
 	c.Ext = arcx
 	return nil
 }
 
-// arcFiles parses the output of the arc list command and returns the listed filenames.
-func arcFiles(out []byte) []string {
-	// Name          Length    Date
-	// ============  ========  =========
-	// TESTDAT1.TXT      2009  14 Feb 25
-	// TESTDAT2.TXT       469  14 Feb 25
-	// TESTDAT3.TXT     81410  14 Feb 25
-	// 		====  ========
-	// Total      3     83888
+// ARCs parses the output of the arc list command and returns the listed filenames.
+func ARCs(out []byte) []string {
+	var files []string
+	listTable := false
 
-	skip1 := []byte("Name          Length    Date")
-	skip2 := []byte("============  ========  =========")
-	end := []byte("====  ========")
-	files := []string{}
 	for line := range bytes.Lines(out) {
-		if bytes.HasPrefix(line, skip1) {
+		trimmed := strings.TrimSpace(string(line))
+
+		const name, length = "Name", "Length"
+		if strings.HasPrefix(trimmed, name) && strings.Contains(trimmed, length) {
 			continue
 		}
-		if bytes.HasPrefix(line, skip2) {
+
+		const prefix = "============"
+		if strings.HasPrefix(trimmed, prefix) {
+			listTable = true
 			continue
 		}
-		if bytes.HasPrefix(bytes.TrimSpace(line), end) {
-			return files
+
+		// the footer line with "====" is the end of file entries
+		const eof, total = "====", "Total"
+		if strings.HasPrefix(trimmed, eof) || strings.HasPrefix(trimmed, total) {
+			break
 		}
-		file := string(line[0:12])
-		files = append(files, file)
+
+		if listTable {
+			const field = 12
+			if len(line) < field {
+				continue
+			}
+
+			name := strings.TrimSpace(string(line[:field]))
+			if name != "" {
+				files = append(files, name)
+			}
+		}
 	}
+
 	return files
 }
 
-// notArc returns true if the output is not an ARC archive.
+// notArc returns true if the output indicates the file is not a valid ARC archive.
 func notArc(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
-	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
-	const match = "has a bad header"
-	return bytes.Contains(p, []byte(match))
+
+	b := bytes.ToLower(output)
+
+	// Howard Chu's arc outputs error messages containing "bad header" or "not an arc"
+	return bytes.Contains(b, []byte("bad header")) ||
+		bytes.Contains(b, []byte("not an arc")) ||
+		bytes.Contains(b, []byte("archive format error"))
 }
 
 // ARC extracts the content of the ARC archive.

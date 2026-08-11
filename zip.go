@@ -18,40 +18,61 @@ import (
 //
 // [zipinfo program]: https://infozip.sourceforge.net/
 func (c *Content) Zip(ctx context.Context, src string) error {
-	const format = "content zipinfo %w"
+	const format = "content zipinfo %s %w"
 	prog, err := exec.LookPath(command.ZipInfo)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
-	const list = "-1"
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, prog, list, src)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
+
+	const list = "-1"
+	const stopParsing = "--"
+	cmd := exec.CommandContext(ctx, prog, list, stopParsing, src)
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	out, err := cmd.Output()
 	if err != nil {
-		// handle broken zips that still contain some valid files
-		if buf.String() != "" && len(out) > 0 {
-			c.Files = strings.Split(string(out), "\n")
-			c.Files = slices.DeleteFunc(c.Files, func(s string) bool {
-				return strings.TrimSpace(s) == ""
-			})
+		if ctx.Err() != nil {
+			return fmt.Errorf(format, "timeout", ctx.Err())
+		}
+
+		// handle broken ZIPs that still returned partial file listings
+		if stderrBuf.Len() > 0 && len(out) > 0 {
+			c.Files = ZipInfo(out)
 			c.Ext = zipx
 			return nil
 		}
-		// otherwise the zipinfo threw an error
-		return fmt.Errorf(format+": %s", err, src)
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf(format, "exec "+src+": "+stderrStr, err)
+		}
+		return fmt.Errorf(format, "exec "+src, err)
 	}
+
 	if len(out) == 0 {
 		return ErrRead
 	}
-	c.Files = strings.Split(string(out), "\n")
-	c.Files = slices.DeleteFunc(c.Files, func(s string) bool {
-		return strings.TrimSpace(s) == ""
-	})
+
+	c.Files = ZipInfo(out)
 	c.Ext = zipx
 	return nil
+}
+
+// ZipInfo cleans and splits raw zipinfo -1 output into a slice of filenames.
+func ZipInfo(out []byte) []string {
+	files := strings.Split(string(out), "\n")
+	files = slices.DeleteFunc(files, func(s string) bool {
+		return strings.TrimSpace(s) == ""
+	})
+	for i, f := range files {
+		files[i] = strings.TrimRight(f, "\r")
+	}
+	return files
 }
 
 // Zip extracts the content of the src ZIP archive.
@@ -60,49 +81,54 @@ func (c *Content) Zip(ctx context.Context, src string) error {
 //
 // [unzip program]: https://www.linux.org/docs/man1/unzip.html
 func (x Extractor) Zip(ctx context.Context, targets ...string) error {
-	const format = "extract unzip %w"
+	const format = "extract unzip %s %w"
+
 	src, dst := x.Source, x.Destination
-	prog, err := exec.LookPath(command.Unzip)
-	if err != nil {
-		return fmt.Errorf(format, err)
-	}
 	if dst == "" {
 		return ErrDest
 	}
+
+	prog, err := exec.LookPath(command.Unzip)
+	if err != nil {
+		return fmt.Errorf(format, "look path", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
-	// [-options]
+
+	// Info-ZIP unzip syntax:
+	// unzip [-options] file[.zip] [file(s)...] [-x file(s)] [-d exdir]
 	const (
-		test            = "-t"  // test archive files
-		caseinsensitive = "-C"  // use case-insensitive matching
-		notimestamps    = "-DD" // skip restoration of timestamps
-		junkpaths       = "-j"  // junk paths, ignore directory structures
-		overwrite       = "-o"  // overwrite existing files without prompting
-		quiet           = "-q"  // quiet
-		quieter         = "-qq" // quieter
-		targetDir       = "-d"  // target directory to extract files to
-		allowCtrlChars  = "-^"  // allow control characters in filenames
-		zipArgsBase     = 5     // base args (quieter, notimestamps, allowCtrlChars, overwrite, src)
-		zipArgsExtra    = 2     // extra args after targets (targetDir, dst)
+		quieter        = "-qq" // quiet mode (suppress output and warnings)
+		notimestamps   = "-DD" // skip restoration of directory timestamps
+		allowCtrlChars = "-^"  // allow control characters in extracted filenames
+		overwrite      = "-o"  // overwrite existing files without prompting
+		targetDir      = "-d"  // target directory to extract files into
+		stopSwitch     = "--"  // stop parsing options
 	)
-	// unzip [-options] file[.zip] [file(s)...] [-x files(s)] [-d exdir]
-	// file[.zip]		path to the zip archive
-	// [file(s)...]		optional list of archived files to process, sep by spaces.
-	// [-x files(s)]	optional files to be excluded.
-	// [-d exdir]		optional target directory to extract files in.
-	args := make([]string, 0, zipArgsBase+len(targets)+zipArgsExtra)
-	args = append(args, quieter, notimestamps, allowCtrlChars, overwrite, src)
-	args = append(args, targets...)
-	args = append(args, targetDir, dst)
-	cmd := exec.CommandContext(ctx, prog, args...)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
-	if err = cmd.Run(); err != nil {
-		if buf.String() != "" {
-			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
+
+	const size = 7 + 2
+	arg := make([]string, 0, size+len(targets))
+	arg = append(arg, quieter, notimestamps, allowCtrlChars, overwrite, stopSwitch, src)
+	arg = append(arg, targets...)
+	arg = append(arg, targetDir, dst)
+
+	cmd := exec.CommandContext(ctx, prog, arg...)
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf(format, "timeout", ctx.Err())
 		}
-		return fmt.Errorf(format+": %s", err, prog)
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf(format, "exec: "+stderrStr, err)
+		}
+		return fmt.Errorf(format, "exec", err)
 	}
+
 	return nil
 }
 
