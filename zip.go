@@ -1,7 +1,6 @@
 package archive
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -19,7 +18,8 @@ import (
 // [zipinfo program]: https://infozip.sourceforge.net/
 func (c *Content) Zip(ctx context.Context, src string) error {
 	const format = "content zipinfo %s %w"
-	prog, err := exec.LookPath(command.ZipInfo)
+	const file = command.ZipInfo
+	prog, err := exec.LookPath(file)
 	if err != nil {
 		return fmt.Errorf(format, "look path", err)
 	}
@@ -28,30 +28,10 @@ func (c *Content) Zip(ctx context.Context, src string) error {
 	defer cancel()
 
 	const list = "-1"
-	const stopParsing = "--"
-	cmd := exec.CommandContext(ctx, prog, list, stopParsing, src)
-
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	out, err := cmd.Output()
+	const stopParsing = "--" // prevent files named with "-" from being parsed as flags
+	out, err := c.Run(ctx, file, prog, list, stopParsing, src)
 	if err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf(format, "timeout", ctx.Err())
-		}
-
-		// handle broken ZIPs that still returned partial file listings
-		if stderrBuf.Len() > 0 && len(out) > 0 {
-			c.Files = ZipInfo(out)
-			c.Ext = zipx
-			return nil
-		}
-
-		stderrStr := strings.TrimSpace(stderrBuf.String())
-		if stderrStr != "" {
-			return fmt.Errorf(format, "exec "+src+": "+stderrStr, err)
-		}
-		return fmt.Errorf(format, "exec "+src, err)
+		return err
 	}
 
 	if len(out) == 0 {
@@ -82,13 +62,14 @@ func ZipInfo(out []byte) []string {
 // [unzip program]: https://www.linux.org/docs/man1/unzip.html
 func (x Extractor) Zip(ctx context.Context, targets ...string) error {
 	const format = "extract unzip %s %w"
+	const file = command.Unzip
 
 	src, dst := x.Source, x.Destination
 	if dst == "" {
 		return ErrDest
 	}
 
-	prog, err := exec.LookPath(command.Unzip)
+	prog, err := exec.LookPath(file)
 	if err != nil {
 		return fmt.Errorf(format, "look path", err)
 	}
@@ -113,23 +94,7 @@ func (x Extractor) Zip(ctx context.Context, targets ...string) error {
 	arg = append(arg, targets...)
 	arg = append(arg, targetDir, dst)
 
-	cmd := exec.CommandContext(ctx, prog, arg...)
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf(format, "timeout", ctx.Err())
-		}
-
-		stderrStr := strings.TrimSpace(stderrBuf.String())
-		if stderrStr != "" {
-			return fmt.Errorf(format, "exec: "+stderrStr, err)
-		}
-		return fmt.Errorf(format, "exec", err)
-	}
-
-	return nil
+	return x.Run(ctx, file, prog, arg...)
 }
 
 // ZipHW extracts the content of the src ZIP archive using the [hwzip program].

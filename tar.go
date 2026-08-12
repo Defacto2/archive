@@ -1,7 +1,6 @@
 package archive
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,8 +18,9 @@ import (
 //
 // [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 func (c *Content) Tar(ctx context.Context, src string) error {
-	const format = `content tar %s %w`
-	prog, err := exec.LookPath(command.BSDTar)
+	const format = "content tar %s %w"
+	const file = command.BSDTar
+	prog, err := exec.LookPath(file)
 	if err != nil {
 		return fmt.Errorf(format, "look path", err)
 	}
@@ -30,22 +30,9 @@ func (c *Content) Tar(ctx context.Context, src string) error {
 
 	const list = "-t"
 	const location = "-f"
-	cmd := exec.CommandContext(ctx, prog, list, location, src)
-
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	out, err := cmd.Output()
+	out, err := c.Run(ctx, file, prog, list, location, src)
 	if err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf("content tar %s timeout: %w", src, ctx.Err())
-		}
-
-		stderrStr := strings.TrimSpace(stderrBuf.String())
-		if stderrStr != "" {
-			return fmt.Errorf(format, "exec "+src+": "+stderrStr, err)
-		}
-		return fmt.Errorf(format, "exec "+src, err)
+		return err
 	}
 
 	if len(out) == 0 {
@@ -81,13 +68,14 @@ func BSDTar(out []byte) []string {
 // [libarchive library]: http://www.libarchive.org/
 func (x Extractor) Tar(ctx context.Context, targets ...string) error {
 	const format = `extract tar %s %w`
+	const file = command.BSDTar
 
 	src, dst := x.Source, x.Destination
 	if dst == "" {
 		return ErrDest
 	}
 
-	prog, err := exec.LookPath(command.BSDTar)
+	prog, err := exec.LookPath(file)
 	if err != nil {
 		return fmt.Errorf(format, "look path", err)
 	}
@@ -97,42 +85,26 @@ func (x Extractor) Tar(ctx context.Context, targets ...string) error {
 
 	// note: BSD tar uses different flags to GNU tar
 	const (
-		extract    = "-x"                    // -x extract files
-		source     = "--file"                // --file path to archive
-		targetDir  = "--cd"                  // --cd target directory
-		noAcls     = "--no-acls"             // --no-acls disable ACLs
-		noFlags    = "--no-fflags"           // --no-fflags disable file flags
-		noModTime  = "--modification-time"   // --modification-time
-		noSafeW    = "--no-safe-writes"      // --no-safe-writes
-		noOwner    = "--no-same-owner"       // --no-same-owner
-		noPerms    = "--no-same-permissions" // --no-same-permissions
-		noXattrs   = "--no-xattrs"           // --no-xattrs disable extended attributes
-		stopSwitch = "--"                    // -- stop parsing switches
+		extract     = "-x"                    // -x extract files
+		source      = "--file"                // --file path to archive
+		targetDir   = "--cd"                  // --cd target directory
+		noAcls      = "--no-acls"             // --no-acls disable ACLs
+		noFlags     = "--no-fflags"           // --no-fflags disable file flags
+		noModTime   = "--modification-time"   // --modification-time
+		noSafeW     = "--no-safe-writes"      // --no-safe-writes
+		noOwner     = "--no-same-owner"       // --no-same-owner
+		noPerms     = "--no-same-permissions" // --no-same-permissions
+		noXattrs    = "--no-xattrs"           // --no-xattrs disable extended attributes
+		stopParsing = "--"                    // -- stop parsing switches
 	)
 
 	const size = 13
 	arg := make([]string, 0, size+len(targets))
 	arg = append(arg, extract, source, src, noAcls, noFlags, noSafeW, noModTime,
-		noOwner, noPerms, noXattrs, targetDir, dst, stopSwitch)
+		noOwner, noPerms, noXattrs, targetDir, dst, stopParsing)
 	arg = append(arg, targets...)
 
-	cmd := exec.CommandContext(ctx, prog, arg...)
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf(format, "timeout", ctx.Err())
-		}
-
-		stderrStr := strings.TrimSpace(stderrBuf.String())
-		if stderrStr != "" {
-			return fmt.Errorf(format, "exec: "+stderrStr, err)
-		}
-		return fmt.Errorf(format, "exec", err)
-	}
-
-	return nil
+	return x.Run(ctx, file, prog, arg...)
 }
 
 // TempTar functions like Tar but removes the source tarball after extraction.

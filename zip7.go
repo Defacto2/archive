@@ -22,7 +22,8 @@ import (
 // [7z program]: https://7-zip.org/
 func (c *Content) Zip7(ctx context.Context, src string) error {
 	const format = "content 7zip %s %w"
-	prog, err := exec.LookPath(command.Zip7)
+	const file = command.Zip7
+	prog, err := exec.LookPath(file)
 	if err != nil {
 		return fmt.Errorf(format, "look path", err)
 	}
@@ -30,25 +31,11 @@ func (c *Content) Zip7(ctx context.Context, src string) error {
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 
-	// use "--" to prevent filenames starting with "-" from being parsed as 7z flags
 	const list = "l"
-	const stopParsing = "--"
-	cmd := exec.CommandContext(ctx, prog, list, stopParsing, src)
-
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	out, err := cmd.Output()
+	const stopParsing = "--" // prevent files named with "-" from being parsed as flags
+	out, err := c.Run(ctx, file, prog, list, stopParsing, src)
 	if err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf(format, "timeout", ctx.Err())
-		}
-
-		stderrStr := strings.TrimSpace(stderrBuf.String())
-		if stderrStr != "" {
-			return fmt.Errorf(format, "exec: "+stderrStr, err)
-		}
-		return fmt.Errorf(format, "exec", err)
+		return err
 	}
 
 	if not7zip(out) {
@@ -131,13 +118,14 @@ func not7zip(output []byte) bool {
 // [7z program]: https://www.7-zip.org/
 func (x Extractor) Zip7(ctx context.Context, targets ...string) error {
 	const format = "extract 7z %s %w"
+	const file = command.Zip7
 
 	src, dst := x.Source, x.Destination
 	if dst == "" {
 		return ErrDest
 	}
 
-	prog, err := exec.LookPath(command.Zip7)
+	prog, err := exec.LookPath(file)
 	if err != nil {
 		return fmt.Errorf(format, "look path", err)
 	}
@@ -167,21 +155,5 @@ func (x Extractor) Zip7(ctx context.Context, targets ...string) error {
 	arg = append(arg, extractFull, overwrite, quiet, yes, targetDir+dst, stopSwitch, src)
 	arg = append(arg, targets...)
 
-	cmd := exec.CommandContext(ctx, prog, arg...)
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf("extract 7z timeout: %w", ctx.Err())
-		}
-
-		stderrStr := strings.TrimSpace(stderrBuf.String())
-		if stderrStr != "" {
-			return fmt.Errorf("extract 7z exec %s %s: %w (%s)", prog, src, ErrProg, stderrStr)
-		}
-		return fmt.Errorf("extract 7z exec %s %s: %w", prog, src, err)
-	}
-
-	return nil
+	return x.Run(ctx, file, prog, arg...)
 }

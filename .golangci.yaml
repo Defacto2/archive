@@ -8,6 +8,7 @@ linters:
     - nlreturn
     - noinlineerr
     - paralleltest
+    - varnamelen
     - wsl
     - wsl_v5
   settings:
@@ -30,6 +31,7 @@ linters:
       - examples$
     rules:
       - linters:
+          - dupl
           - goconst
         path: _test\.go$
 

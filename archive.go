@@ -435,7 +435,7 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) (err
 // For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
 func (x Extractor) checkSign(ctx context.Context, sign magicnumber.Signature, targets ...string) error {
 	if AccessViolation() {
-		switch sign {
+		switch sign { //nolint:exhaustive
 		case
 			magicnumber.ArchiveRobertJung,
 			magicnumber.RoshalARchive,
@@ -651,4 +651,54 @@ func commander(ctx context.Context, src, filename string) ([]string, error) {
 		return strings.TrimSpace(s) == ""
 	})
 	return files, nil
+}
+
+// Run executes an extraction command, capturing stderr and context timeouts.
+func (x Extractor) Run(ctx context.Context, file, prog string, arg ...string) error {
+	cmd := exec.CommandContext(ctx, prog, arg...)
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	err := cmd.Run()
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() != nil {
+		return fmt.Errorf("extract %s timeout: %w", file, ctx.Err())
+	}
+	stderrStr := strings.TrimSpace(stderrBuf.String())
+	if stderrStr != "" {
+		return fmt.Errorf("extract %s exec: %w: %s", file, err, stderrStr)
+	}
+	return fmt.Errorf("extract %s exec: %w", file, err)
+}
+
+// Run executes a content list command, capturing output, stderr, and context timeouts.
+func (c *Content) Run(ctx context.Context, file, prog string, arg ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, prog, arg...)
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	out, err := cmd.Output()
+	if err == nil {
+		return out, nil
+	}
+
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("content %s timeout: %w", file, ctx.Err())
+	}
+
+	if file == command.ZipInfo {
+		// handle broken ZIPs that still returned partial file listings
+		if stderrBuf.Len() > 0 && len(out) > 0 {
+			return out, nil
+		}
+	}
+
+	stderrStr := strings.TrimSpace(stderrBuf.String())
+	if stderrStr != "" {
+		return nil, fmt.Errorf("content %s exec: %w (%s)", file, err, stderrStr)
+	}
+	return nil, fmt.Errorf("content %s exec: %w", file, err)
 }

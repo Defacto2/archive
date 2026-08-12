@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"unicode"
 
 	"github.com/Defacto2/archive/command"
 )
@@ -19,70 +20,65 @@ import (
 //
 // [lha program]: https://fragglet.github.io/lhasa/
 func (c *Content) LHA(ctx context.Context, src string) error {
-	const format = "content lha %w"
-	prog, err := exec.LookPath(command.Lha)
+	const format = "content lha %s %w"
+	const file = command.Lha
+	prog, err := exec.LookPath(file)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
 
-	const list = "-l"
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, prog, list, src)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
-	out, err := cmd.Output()
+
+	const list = "-l"
+	out, err := c.Run(ctx, file, prog, list, src)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return err
 	}
+
 	if notLHA(out) {
 		return ErrRead
 	}
-	c.Files = lhaFiles(out)
+
+	c.Files = LHAs(out)
 	c.Ext = lhax
 	return nil
 }
 
-// lhaFiles parses the output of the lha list command and returns the listed filenames.
-func lhaFiles(out []byte) []string {
-	// PERMSSN    UID  GID      SIZE  RATIO     STAMP           NAME
-	// ---------- ----------- ------- ------ ------------ --------------------
-	// [generic]                 2009  48.8% Feb 14 13:21 testdat1.txt
-	// [generic]                  469  66.5% Feb 14 13:17 testdat2.txt
-	// [generic]                81410  29.5% Feb 14 13:21 testdat3.txt
-	// ---------- ----------- ------- ------ ------------ --------------------
-	//  Total         3 files   83888  30.2% Feb 14 07:19
+// LHAs parses the output of the lha list command and returns the listed filenames.
+func LHAs(out []byte) []string {
+	var files []string
+	listTable := false
+	listIndex := -1
 
-	const tableEnd = 2
-	skip1 := []byte("PERMSSN    UID  GID")
-	skip2 := []byte("---------- -----------")
-	const padd = len("---------- ----------- ------- ------ ------------ ")
-	files := []string{}
-	skipped := 0
-	for line := range bytes.Lines(out) {
-		if bytes.HasPrefix(line, skip1) {
-			skipped++
+	for s := range bytes.Lines(out) {
+		line := string(s)
+		trimmed := strings.TrimSpace(line)
+
+		const prefix = "----------"
+		if strings.HasPrefix(trimmed, prefix) {
+			if !listTable {
+				// top border
+				listTable = true
+				listIndex = strings.LastIndex(line, " ") + 1
+				continue
+			}
+			// bottom border
+			break
+		}
+
+		if !listTable || trimmed == "" {
 			continue
 		}
-		if bytes.HasPrefix(line, skip2) {
-			skipped++
-			continue
+
+		if fallback := listIndex > 0 && len(line) > listIndex; fallback {
+			file := strings.TrimSpace(line[listIndex:])
+			if file != "" {
+				files = append(files, file)
+			}
 		}
-		if skipped == 0 {
-			continue
-		}
-		if skipped > tableEnd {
-			return files
-		}
-		if len(line) < padd {
-			continue
-		}
-		file := strings.TrimSpace(string(line[padd:]))
-		if file == "" {
-			continue
-		}
-		files = append(files, file)
 	}
+
 	return files
 }
 
@@ -91,9 +87,20 @@ func notLHA(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
-	p := bytes.ReplaceAll(output, []byte("  "), []byte(""))
-	const match = "Total 0 files 0"
-	return bytes.Contains(p, []byte(match))
+	var clean strings.Builder
+	for _, r := range string(output) {
+		if !unicode.IsSpace(r) {
+			clean.WriteRune(r)
+		}
+	}
+	s := clean.String()
+
+	// match "Total 0 files 0" regardless of space count or types
+	if strings.Contains(s, "Total0files0") {
+		return true
+	}
+
+	return false
 }
 
 // LHA extracts the targets from the source LHA/LZH archive.
@@ -104,49 +111,41 @@ func notLHA(output []byte) bool {
 //
 // [lha program]: https://fragglet.github.io/lhasa/
 func (x Extractor) LHA(ctx context.Context, targets ...string) error {
-	const format = "extract lha %w"
+	const format = "extract lha %s %w"
+	const file = command.Lha
+
 	src, dst := x.Source, x.Destination
-	prog, err := exec.LookPath(command.Lha)
-	if err != nil {
-		return fmt.Errorf(format, err)
+	if dst == "" {
+		return ErrDest
 	}
+	prog, err := exec.LookPath(file)
+	if err != nil {
+		return fmt.Errorf(format, "look path", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
+
 	// example command: lha -eq2w=destdir/ archive *
 	const (
-		// "Files are extracted to the current working directory unless the 'w' option is specified."
-		extract = "e"
-		// "Ignore paths of archived files: extract all archived files to  the  same  directory, ignoring subdirectories."
-		ignorepaths = "i"
-		// "Force overwrite of existing files: do not prompt"
-		overwrite   = "f"
-		quiet       = "q1"
-		quieter     = "q2"
-		lhaArgsBase = 2 // base number of args (param, src) before targets
+		extract     = "e" // extract from archive (x also does  the same)
+		ignorepaths = "i" // ignore directory path
+		overwrite   = "f" // force overwrite (no prompt)
 	)
-	param := fmt.Sprintf("-%s%s%sw=%s", extract, overwrite, ignorepaths, dst)
-	args := make([]string, lhaArgsBase, lhaArgsBase+len(targets))
-	args[0] = param
-	args[1] = src
 
-	// convert targets to lowercase which is a quirk in lha
-	for i, s := range targets {
-		targets[i] = strings.ToLower(s)
-	}
-	args = append(args, targets...)
+	const size = 3
+	arg := make([]string, 0, size+len(targets))
 
-	cmd := exec.CommandContext(ctx, prog, args...)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
-	out, err := cmd.Output()
-	if err != nil {
-		if buf.String() != "" {
-			return fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
-		}
-		return fmt.Errorf(format+": %s", err, prog)
+	param := func() string {
+		const format = "-%s%s%sw=%s"
+		return fmt.Sprintf(format, extract, overwrite, ignorepaths, dst)
 	}
-	if len(out) == 0 {
-		return ErrRead
+	arg = append(arg, param(), src)
+
+	// convert and append targets as lowercase, which is a quirk with the lha program
+	for _, target := range targets {
+		arg = append(arg, strings.ToLower(target))
 	}
-	return nil
+
+	return x.Run(ctx, file, prog, arg...)
 }

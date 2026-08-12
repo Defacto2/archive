@@ -18,30 +18,33 @@ import (
 //
 // [gcab program]: https://man.archlinux.org/man/gcab.1.en
 func (c *Content) Cab(ctx context.Context, src string) error {
-	const format = "cab reader %w"
-	prog, err := exec.LookPath(command.Cab)
+	const format = "content cab reader %s %w"
+	const file = command.Cab
+	prog, err := exec.LookPath(file)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
-	const list = "--list"
-	var buf bytes.Buffer
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, prog, list, src)
-	cmd.Stderr = &buf
-	out, err := cmd.Output()
+
+	const list = "--list" // list content without any file details
+	out, err := c.Run(ctx, file, prog, list, src)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return err
 	}
+
 	const match = "The input is not of cabinet format"
 	if len(out) == 0 || bytes.Contains(out, []byte(match)) {
 		return ErrRead
 	}
-	for name := range strings.Lines(string(out)) {
-		if strings.TrimSpace(name) != "" {
+
+	for line := range strings.Lines(string(out)) {
+		if name := strings.TrimSpace(line); name != "" {
 			c.Files = append(c.Files, name)
 		}
 	}
+
 	c.Ext = cabx
 	return nil
 }

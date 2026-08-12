@@ -19,22 +19,23 @@ import (
 //
 // [arj program]: https://arj.sourceforge.net/
 func (c *Content) ARJ(ctx context.Context, src string) (err error) {
-	const format = "content arj %w"
+	const format = "content arj %s %w"
+
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
 
 	newname := src
 	name, err := HardLink(arjx, src)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "hard link", err)
 	}
 	if name != "" {
 		newname = name
 		defer func() {
-			if cErr := os.Remove(name); cErr != nil {
-				err = errors.Join(err, fmt.Errorf(format, err))
+			if cErr := os.Remove(name); cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf(format, "remove temp hardlink", cErr))
 			}
 		}()
 	}
@@ -42,55 +43,71 @@ func (c *Content) ARJ(ctx context.Context, src string) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 
+	// arj syntax: arj l <archive.arj>
 	const verboselist = "l"
 	cmd := exec.CommandContext(ctx, prog, verboselist, newname)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf(format, err)
+		if ctx.Err() != nil {
+			return fmt.Errorf(format, "timeout", ctx.Err())
+		}
+
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr != "" {
+			return fmt.Errorf(format, "exec "+src+": "+stderrStr, err)
+		}
+		return fmt.Errorf(format, "exec "+src, err)
 	}
+
 	if notArj(out) {
 		return ErrRead
 	}
+
 	c.Ext = arjx
-	c.Files = arjFiles(out)
+	c.Files = ARJs(out)
 	return nil
 }
 
-// arjFiles parses the output of the arj list command and returns the listed filenames.
-func arjFiles(out []byte) []string {
-	// Filename       Original Compressed Ratio DateTime modified Attributes/GUA BPMGS
-	// ------------ ---------- ---------- ----- ----------------- -------------- -----
-	// TESTDAT1.TXT       2009        889 0.443 25-02-14 13:21:10                  1
-	// TESTDAT2.TXT        469        266 0.567 25-02-14 13:17:34                  1
-	// TESTDAT3.TXT      81410      22438 0.276 25-02-14 13:21:02                  1
-	// ------------ ---------- ---------- -----
-	//      3 files      83888      23593 0.281
+// ARJs parses the output of the arj list command and returns the listed filenames.
+func ARJs(out []byte) []string {
+	var files []string
+	listTable := false
 
-	const tableEnd = 2
-	skip1 := []byte("Filename       Original")
-	skip2 := []byte("------------ ----------")
-	files := []string{}
-	skipped := 0
 	for line := range bytes.Lines(out) {
-		if bytes.HasPrefix(line, skip1) {
-			skipped++
+		trimmed := strings.TrimSpace(string(line))
+
+		const filename, original = "Filename", "Original"
+		if strings.HasPrefix(trimmed, filename) && strings.Contains(trimmed, original) {
 			continue
 		}
-		if bytes.HasPrefix(line, skip2) {
-			skipped++
-			continue
+
+		const prefix = "------------"
+		if strings.HasPrefix(trimmed, prefix) {
+			if !listTable {
+				listTable = true
+				continue
+			}
+			// a second prefix separator indicates the eof list
+			break
 		}
-		if skipped == 0 {
-			continue
+
+		if listTable {
+			const field = 14
+			if len(line) < field {
+				continue
+			}
+
+			name := strings.TrimSpace(string(line[:field]))
+			if name != "" {
+				files = append(files, name)
+			}
 		}
-		if skipped > tableEnd {
-			return files
-		}
-		file := string(line[0:12])
-		files = append(files, file)
 	}
+
 	return files
 }
 
@@ -99,8 +116,7 @@ func notArj(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
-	const match = "is not an ARJ archive"
-	return bytes.Contains(output, []byte(match))
+	return bytes.Contains(output, []byte("is not an ARJ archive"))
 }
 
 // ARJ extracts the targets from the source ARJ archive
@@ -109,58 +125,52 @@ func notArj(output []byte) bool {
 //
 // [arj program]: https://arj.sourceforge.net/
 func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
-	const format = "extract arj %w"
+	const format = "extract arj %s %w"
+
 	src, dst := x.Source, x.Destination
-	if inf, err := os.Stat(dst); err != nil {
-		return fmt.Errorf("%w: %s", err, dst)
-	} else if !inf.IsDir() {
-		return fmt.Errorf("%w: %s", ErrPath, dst)
+	if dst == "" {
+		return ErrDest
 	}
+	const perm = 0o755
+	if err := os.MkdirAll(dst, perm); err != nil {
+		return fmt.Errorf(format, "mkdir dst "+dst, err)
+	}
+
 	// note: only use arj, as unarj offers limited functionality
 	prog, err := exec.LookPath(command.Arj)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "look path", err)
 	}
 
 	newname := src
 	name, err := HardLink(arjx, src)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "hard link", err)
 	}
 	if name != "" {
 		newname = name
 		defer func() {
-			if cErr := os.Remove(name); cErr != nil {
-				err = errors.Join(err, fmt.Errorf(format, err))
+			if cErr := os.Remove(name); cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf(format, "hard link cleanup", err))
 			}
 		}()
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
+
 	// note: these flags are for arj32 v3.10
 	const (
-		extract      = "x"   // x extract files
-		yes          = "-y"  // -y assume yes to all queries
-		targetDir    = "-ht" // -ht target directory
-		arjArgsBase  = 3     // base number of args before targets and targetDir
-		arjArgsExtra = 1     // extra args after targets (targetDir+dst)
+		extract   = "x"   // x extract files
+		yes       = "-y"  // -y assume yes to all queries
+		targetDir = "-ht" // -ht target directory
 	)
-	args := make([]string, arjArgsBase, arjArgsBase+len(targets)+arjArgsExtra)
-	args[0] = extract
-	args[1] = yes
-	args[2] = newname
-	args = append(args, targets...)
-	args = append(args, targetDir+dst)
-	cmd := exec.CommandContext(ctx, prog, args...)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
-	if err = cmd.Run(); err != nil {
-		if buf.String() != "" {
-			return fmt.Errorf(format+": %s: '%s'",
-				ErrProg, prog, strings.TrimSpace(buf.String()))
-		}
-		return fmt.Errorf(format+": %s", err, prog)
-	}
-	return nil
+
+	const size = 4
+	arg := make([]string, 0, size+len(targets))
+	arg = append(arg, extract, yes, newname)
+	arg = append(arg, targets...)
+	arg = append(arg, targetDir+dst)
+
+	return x.Run(ctx, "arj", prog, arg...)
 }
