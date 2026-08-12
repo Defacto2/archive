@@ -54,7 +54,10 @@ import (
 const (
 	// WriteWriteRead is the file mode for read and write access.
 	// The file owner and group has read and write access, and others have read access.
-	WriteWriteRead fs.FileMode = 0o664
+	WriteWriteRead   fs.FileMode = 0o664
+	DirWriteReadRead fs.FileMode = 0o755
+	WriteOnly                    = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	WriteRead                    = os.O_CREATE | os.O_RDWR | os.O_TRUNC
 )
 
 const (
@@ -86,6 +89,7 @@ var (
 	ErrProg           = errors.New("program error")
 	ErrFile           = errors.New("path is a directory")
 	ErrPath           = errors.New("path is a file")
+	ErrPathInsecure   = errors.New("insecure file path")
 	ErrPanic          = errors.New("extract panic")
 	ErrMissing        = errors.New("path does not exist")
 	ErrTooMany        = errors.New("will not decompress this archive as it is very large")

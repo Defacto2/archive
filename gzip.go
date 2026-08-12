@@ -21,7 +21,7 @@ import (
 
 // Package file gzip.go contains the Gzip compression methods.
 
-// Gzip returns the uncompressed filename of the gzip archive using standard Go libraries.
+// Gzip returns the uncompressed filename of the gzip archive.
 func (c *Content) Gzip(ctx context.Context, src string) error {
 	const format = "content gzip %s %w"
 
@@ -47,7 +47,7 @@ func (c *Content) Gzip(ctx context.Context, src string) error {
 	}
 
 	// prefer original filename found in the gzip header
-	name := gzr.Header.Name
+	name := gzr.Name
 	if name == "" {
 		name = GzipName(src)
 	}
@@ -57,6 +57,7 @@ func (c *Content) Gzip(ctx context.Context, src string) error {
 	return nil
 }
 
+// Gzip extracts the content...
 func (x Extractor) Gzip(ctx context.Context, targets ...string) error {
 	const format = "extract gzip %s %w"
 
@@ -76,70 +77,111 @@ func (x Extractor) Gzip(ctx context.Context, targets ...string) error {
 	}
 	defer src.Close()
 
-	buf := bufio.NewReader(src)
+	r := bufio.NewReader(src)
 
-	if isTarStream(buf) {
-		return extractTarStream(ctx, buf, x.Destination, targets)
+	if x.ustar(r) {
+		return x.tarStream(ctx, r, targets)
 	}
 
-	return extractSingleGzipFile(buf, x.Source, src.Header.Name, x.Destination)
-
-	// base := strings.ToLower(filepath.Base(x.Source))
-	// const tgz = tgzx + gzipx
-	// switch {
-	// case
-	// 	strings.HasSuffix(base, tgzx),
-	// 	strings.HasSuffix(base, tgz):
-	// 	return extractTarStream(ctx, src, x.Destination, targets)
-	// default:
-	// }
-	//
-	// // Handle single .gz file stream
-	// path := src.Header.Name
-	// if path == "" {
-	// 	path = GzipName(x.Source)
-	// }
-	//
-	// const flag = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
-	// const perm = 0o644
-	// name := filepath.Join(x.Destination, filepath.Base(path))
-	// dst, err := os.OpenFile(name, flag, perm)
-	// if err != nil {
-	// 	return fmt.Errorf(format, "create destination file", err)
-	// }
-	// defer dst.Close()
-	//
-	// if _, err := io.Copy(dst, src); err != nil {
-	// 	return fmt.Errorf(format, "decompress", err)
-	// }
-	// return nil
+	return x.gzipFile(r, src.Name)
 }
 
-func isTarStream(r *bufio.Reader) bool {
-	const tarHeaderLen = 512
-	peek, err := r.Peek(tarHeaderLen)
+// tarStream extracts the content of a tar archive directly from an io.Reader stream.
+func (x Extractor) tarStream(ctx context.Context, r io.Reader, targets []string) error {
+	const format = "extract tar stream %s %w"
+
+	src := tar.NewReader(r)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf(format, "timeout", ctx.Err())
+		default:
+		}
+
+		header, err := src.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf(format, "read header", err)
+		}
+
+		// filter target files
+		if len(targets) > 0 && !slices.Contains(targets, header.Name) {
+			continue
+		}
+
+		localPath, err := filepath.Localize(header.Name)
+		if err != nil {
+			return fmt.Errorf(format, header.Name, ErrPathInsecure)
+		}
+		path := filepath.Join(x.Destination, localPath)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			const perm = DirWriteReadRead
+			if err := os.MkdirAll(path, perm); err != nil {
+				return fmt.Errorf(format, "mkdir all", err)
+			}
+
+		case tar.TypeReg:
+			perm := DirWriteReadRead
+			parent := filepath.Dir(path)
+			if err := os.MkdirAll(parent, perm); err != nil {
+				return fmt.Errorf(format, "mkdir parent", err)
+			}
+
+			const flag = WriteRead
+			perm = header.FileInfo().Mode()
+			dst, err := os.OpenFile(path, flag, perm)
+			if err != nil {
+				return fmt.Errorf(format, "create", err)
+			}
+
+			if _, err := io.CopyN(dst, src, header.Size); err != nil {
+				dst.Close()
+				return fmt.Errorf(format, "copy", err)
+			}
+			dst.Close()
+		}
+	}
+
+	return nil
+}
+
+// ustar peeks into the reader looking for a "ustar" magic header.
+func (x Extractor) ustar(r *bufio.Reader) bool {
+	if r == nil {
+		return false
+	}
+	const header = 512
+	peek, err := r.Peek(header)
 	if err != nil || len(peek) < 262 {
 		return false
 	}
-	// Bytes 257..262 contain the "ustar" magic header signature
-	return string(peek[257:262]) == "ustar"
+	const ustar = "ustar"
+	return string(peek[257:262]) == ustar
 }
 
-func extractSingleGzipFile(r io.Reader, src, headerName, dst string) error {
-	outName := headerName
-	if outName == "" {
-		outName = GzipName(src)
+// gzipFile extracts the named file from the reader.
+func (x Extractor) gzipFile(r io.Reader, name string) error {
+	const format = "extractor gzip file %s %w"
+	s := name
+	if s == "" {
+		s = GzipName(x.Source)
 	}
 
-	dstPath := filepath.Join(dst, filepath.Base(outName))
-	out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	path := filepath.Join(x.Destination, filepath.Base(s))
+	const perm = WriteWriteRead
+	dst, err := os.OpenFile(path, WriteOnly, perm)
 	if err != nil {
-		return fmt.Errorf("extract gzip create file: %w", err)
+		return fmt.Errorf(format, "create file", err)
 	}
-	defer out.Close()
+	defer dst.Close()
 
-	if _, err := io.Copy(out, r); err != nil {
-		return fmt.Errorf("extract gzip copy: %w", err)
+	if _, err := io.Copy(dst, r); err != nil {
+		return fmt.Errorf(format, "copy", err)
 	}
 	return nil
 }
@@ -291,63 +333,6 @@ func (c *Content) readTarball(ctx context.Context, src string) (err error) {
 //
 // 	return nil
 // }
-
-// extractTarStream reads a tar archive directly from an io.Reader stream.
-func extractTarStream(ctx context.Context, r io.Reader, dst string, targets []string) error {
-	tr := tar.NewReader(r)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("extract tar read header: %w", err)
-		}
-
-		// Filter target files if target list was provided
-		if len(targets) > 0 && !slices.Contains(targets, header.Name) {
-			continue
-		}
-
-		// Prevent Zip Slip / Path Traversal vulnerabilities
-		targetPath := filepath.Join(dst, header.Name)
-		if !strings.HasPrefix(targetPath, filepath.Clean(dst)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path in archive: %s", header.Name)
-		}
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0o755); err != nil {
-				return fmt.Errorf("extract tar mkdir: %w", err)
-			}
-
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				return fmt.Errorf("extract tar mkdir parent: %w", err)
-			}
-
-			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, header.FileInfo().Mode())
-			if err != nil {
-				return fmt.Errorf("extract tar create: %w", err)
-			}
-
-			if _, err := io.Copy(outFile, tr); err != nil {
-				outFile.Close()
-				return fmt.Errorf("extract tar copy: %w", err)
-			}
-			outFile.Close()
-		}
-	}
-
-	return nil
-}
 
 // Gzip decompresses the source archive file to the destination directory.
 // The source file is expected to be a gzip compressed file. Unlike the other

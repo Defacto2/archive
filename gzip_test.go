@@ -19,10 +19,11 @@ func TestGzipContent(t *testing.T) {
 
 	tests := []struct {
 		filename string
+		want     string
 		wantErr  bool
 	}{
-		{TestGzip1, false},
-		{TestGzip2, false},
+		{TestGzip1, TestTar1, false},
+		{TestGzip2, TestDat3, false},
 	}
 
 	for _, tt := range tests {
@@ -41,9 +42,11 @@ func TestGzipContent(t *testing.T) {
 
 			count := len(c.Files)
 			const want = 1
-			be.Equal(t, c.Ext, ".gz")
+			be.Equal(t, c.Ext, gzx)
 			be.Equal(t, count, want)
-			//testingTexts(t, c.Files...)
+			if count > 0 {
+				be.Equal(t, c.Files[0], tt.want)
+			}
 		})
 	}
 }

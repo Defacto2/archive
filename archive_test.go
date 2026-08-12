@@ -59,10 +59,16 @@ type dat struct {
 	bytes int64
 }
 
+const (
+	TestDat1 = "TESTDAT1.TXT"
+	TestDat2 = "TESTDAT2.TXT"
+	TestDat3 = "TESTDAT3.TXT"
+)
+
 var texts = [3]dat{ //nolint:gochecknoglobals
-	{"TESTDAT1.TXT", 2009},
-	{"TESTDAT2.TXT", 469},
-	{"TESTDAT3.TXT", 81_410},
+	{TestDat1, 2009},
+	{TestDat2, 469},
+	{TestDat3, 81_410},
 }
 
 func textnames(t *testing.T) [3]string {
