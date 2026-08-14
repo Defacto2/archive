@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,51 @@ import (
 )
 
 // Package file zip.go contains the ZIP package and compression methods.
+
+type Compression uint16
+
+const (
+	Store Compression = iota // no compression
+	Shrink
+	Reduce1
+	Reduce2
+	Reduce3
+	Reduce4
+	Implode
+	Unused
+	Deflate // DEFLATE compressed
+)
+
+var names = [9]string{
+	Store:   "STORE",
+	Shrink:  "SHRINK",
+	Reduce1: "REDUCE1",
+	Reduce2: "REDUCE2",
+	Reduce3: "REDUCE3",
+	Reduce4: "REDUCE4",
+	Implode: "IMPLODE",
+	Unused:  "unused",
+	Deflate: "DEFLATE",
+}
+
+func (c Compression) String() string {
+	names := [9]string{
+		Store:   "STORE",
+		Shrink:  "SHRINK",
+		Reduce1: "REDUCE1",
+		Reduce2: "REDUCE2",
+		Reduce3: "REDUCE3",
+		Reduce4: "REDUCE4",
+		Implode: "IMPLODE",
+		Unused:  "unused",
+		Deflate: "DEFLATE",
+	}
+
+	if int(c) >= len(names) {
+		return fmt.Sprintf("Compression(%d)", c)
+	}
+	return names[c]
+}
 
 // Zip returns the content of the src ZIP archive.
 // The format is credited to Phil Katz.
@@ -132,7 +178,8 @@ func (x Extractor) zipReader( //nolint:funlen
 	const msg = "extract zip"
 	const format = msg + " %s %w"
 	for n, f := range r.File {
-		logName := slog.Group("entry", slog.Int("#", n), slog.String("stored name", f.Name))
+		logName := slog.Group(strconv.Itoa(n), slog.String("name", f.Name),
+			slog.String("method", Compression(f.Method).String()))
 		logErr := func(s string, err error) {
 			logger.Error(msg+" "+s, logName, slog.Any("error", err))
 		}

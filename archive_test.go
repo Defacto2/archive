@@ -99,7 +99,7 @@ func testingXTexts(t *testing.T, tempDir string) {
 		root:         tempDir,
 		wants:        3,
 		enforceNames: true,
-	}.extractor(t, names, texts)
+	}.extractor(t, names[:], texts[:])
 }
 
 func lowernames(t *testing.T) [3]string {
@@ -129,22 +129,45 @@ func testingXLower(t *testing.T, tempDir string) {
 		root:         tempDir,
 		wants:        3,
 		enforceNames: true,
-	}.extractor(t, names, texts)
+	}.extractor(t, names[:], texts[:])
 }
 
-// TODO: add all test files.
-var mixes = [3]dat{ //nolint:gochecknoglobals
+var mixes = [15]dat{ //nolint:gochecknoglobals
 	{"TEST.ANS", 68},
+	{"TEST.ASC", 13},
+	{"TEST.BMP", 750_054},
+	{"TEST.CAP", 13},
+	{"TEST.DIZ", 13},
+	{"TEST.DOC", 13},
 	{"TEST.EXE", 2_426_368},
+	{"TEST.GIF", 2_646},
+	{"TEST.JPG", 16_461},
+	{"TEST.ME", 12},
+	{"TEST.NFO", 13},
+	{"TEST.PCX", 2_426_368},
+	{"TEST.PNG", 4_163},
+	{"TEST.TXT", 14},
 	{"TEST~1.JPE", 16461},
 }
 
-func mixnames(t *testing.T) [3]string {
+func mixnames(t *testing.T) [15]string {
 	t.Helper()
-	return [3]string{
+	return [15]string{
 		mixes[0].name,
 		mixes[1].name,
 		mixes[2].name,
+		mixes[3].name,
+		mixes[4].name,
+		mixes[5].name,
+		mixes[6].name,
+		mixes[7].name,
+		mixes[8].name,
+		mixes[9].name,
+		mixes[10].name,
+		mixes[11].name,
+		mixes[12].name,
+		mixes[13].name,
+		mixes[14].name,
 	}
 }
 
@@ -164,7 +187,7 @@ func testingXMixes(t *testing.T, tempDir string) {
 		root:         tempDir,
 		wants:        15,
 		enforceNames: false,
-	}.extractor(t, names, mixes)
+	}.extractor(t, names[:], mixes[:])
 }
 
 type config struct {
@@ -173,7 +196,7 @@ type config struct {
 	enforceNames bool   // throw errors for any unexpected extracted files
 }
 
-func (c config) extractor(t *testing.T, names [3]string, data [3]dat) {
+func (c config) extractor(t *testing.T, names []string, data []dat) {
 	t.Helper()
 
 	count := 0
