@@ -1,22 +1,14 @@
 package archive
 
 import (
-	"archive/tar"
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
-
-	"github.com/Defacto2/archive/command"
-	"github.com/Defacto2/helper"
 )
 
 // Package file gzip.go contains the Gzip compression methods.
@@ -24,6 +16,10 @@ import (
 // Gzip returns the uncompressed filename of the gzip archive.
 func (c *Content) Gzip(ctx context.Context, src string) error {
 	const format = "content gzip %s %w"
+
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf(format, "timeout", err)
+	}
 
 	file, err := os.Open(src)
 	if err != nil {
@@ -37,16 +33,6 @@ func (c *Content) Gzip(ctx context.Context, src string) error {
 	}
 	defer gzr.Close()
 
-	base := strings.ToLower(filepath.Base(src))
-	const tgz = tgzx + gzipx
-	switch {
-	case
-		strings.HasSuffix(base, tgzx),
-		strings.HasSuffix(base, tgz):
-		return c.readTarball(ctx, src)
-	}
-
-	// prefer original filename found in the gzip header
 	name := gzr.Name
 	if name == "" {
 		name = GzipName(src)
@@ -57,7 +43,56 @@ func (c *Content) Gzip(ctx context.Context, src string) error {
 	return nil
 }
 
-// Gzip extracts the content...
+// GzipTar returns the content of a TAR archive compressed with gzip.
+// This process is slower as the gzip file must first be decompressed
+// to a temporary directory before the TAR archive can be accessed.
+func (c *Content) GzipTar(ctx context.Context, src string) error {
+	const format = "content gzip tar %s %w"
+
+	f, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf(format, "open src", err)
+	}
+	defer f.Close()
+
+	rd, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf(format, "header", ErrRead)
+	}
+	defer rd.Close()
+
+	name := rd.Name
+	if name == "" {
+		name = GzipName(src)
+	}
+
+	const pattern = "archive-cgz-decompress-*"
+	tempDir, err := os.MkdirTemp("", pattern)
+	if err != nil {
+		return fmt.Errorf(format, "temp directory", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	r := bufio.NewReader(rd)
+	x := Extractor{
+		Source:      "", // not needed
+		Destination: tempDir,
+	}
+	err = x.singleFile(r, name)
+	if err != nil {
+		return fmt.Errorf(format, "temp directory", err)
+	}
+
+	tempTar := filepath.Join(tempDir, name)
+	return c.Tar(ctx, tempTar)
+}
+
+// Gzip extracts the compressed file from a gzip archive.
+// If the compressed file is a supported TAR archive,
+// that too is extracted. These combined files often use
+// the ".tgz" and ".tar.gz" filename extensions.
+//
+// The targets are only for TAR archives and are otherwise ignored.
 func (x Extractor) Gzip(ctx context.Context, targets ...string) error {
 	const format = "extract gzip %s %w"
 
@@ -79,93 +114,15 @@ func (x Extractor) Gzip(ctx context.Context, targets ...string) error {
 
 	r := bufio.NewReader(src)
 
-	if x.ustar(r) {
-		return x.tarStream(ctx, r, targets)
+	if IsTar(r) {
+		return x.tarReader(ctx, nil, r, targets...)
 	}
 
-	return x.gzipFile(r, src.Name)
+	return x.singleFile(r, src.Name)
 }
 
-// tarStream extracts the content of a tar archive directly from an io.Reader stream.
-func (x Extractor) tarStream(ctx context.Context, r io.Reader, targets []string) error {
-	const format = "extract tar stream %s %w"
-
-	src := tar.NewReader(r)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf(format, "timeout", ctx.Err())
-		default:
-		}
-
-		header, err := src.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf(format, "read header", err)
-		}
-
-		// filter target files
-		if len(targets) > 0 && !slices.Contains(targets, header.Name) {
-			continue
-		}
-
-		localPath, err := filepath.Localize(header.Name)
-		if err != nil {
-			return fmt.Errorf(format, header.Name, ErrPathInsecure)
-		}
-		path := filepath.Join(x.Destination, localPath)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			const perm = DirWriteReadRead
-			if err := os.MkdirAll(path, perm); err != nil {
-				return fmt.Errorf(format, "mkdir all", err)
-			}
-
-		case tar.TypeReg:
-			perm := DirWriteReadRead
-			parent := filepath.Dir(path)
-			if err := os.MkdirAll(parent, perm); err != nil {
-				return fmt.Errorf(format, "mkdir parent", err)
-			}
-
-			const flag = WriteRead
-			perm = header.FileInfo().Mode()
-			dst, err := os.OpenFile(path, flag, perm)
-			if err != nil {
-				return fmt.Errorf(format, "create", err)
-			}
-
-			if _, err := io.CopyN(dst, src, header.Size); err != nil {
-				dst.Close()
-				return fmt.Errorf(format, "copy", err)
-			}
-			dst.Close()
-		}
-	}
-
-	return nil
-}
-
-// ustar peeks into the reader looking for a "ustar" magic header.
-func (x Extractor) ustar(r *bufio.Reader) bool {
-	if r == nil {
-		return false
-	}
-	const header = 512
-	peek, err := r.Peek(header)
-	if err != nil || len(peek) < 262 {
-		return false
-	}
-	const ustar = "ustar"
-	return string(peek[257:262]) == ustar
-}
-
-// gzipFile extracts the named file from the reader.
-func (x Extractor) gzipFile(r io.Reader, name string) error {
+// singleFile extracts the named file from the reader.
+func (x Extractor) singleFile(r io.Reader, name string) error {
 	const format = "extractor gzip file %s %w"
 	s := name
 	if s == "" {
@@ -186,46 +143,6 @@ func (x Extractor) gzipFile(r io.Reader, name string) error {
 	return nil
 }
 
-// Gzip returns the uncompressed filename of the [gzip] archive which is expected to be a single file.
-//
-// [gzip]: https://www.gnu.org/software/gzip/
-func (c *Content) _Gzip(ctx context.Context, src string) error {
-	const format = "content gzip %s %w"
-	const file = command.Gzip
-	prog, err := exec.LookPath(file)
-	if err != nil {
-		return fmt.Errorf(format, "look path", err)
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
-	defer cancel()
-
-	const test = "-t"
-	_, err = c.Run(ctx, file, prog, test, src)
-	if err != nil {
-		return err
-	}
-
-	base := strings.ToLower(filepath.Base(src))
-	const tgz = tgzx + gzipx
-	switch {
-	case strings.HasSuffix(base, tgzx), strings.HasSuffix(base, tgz):
-		return c.readTarball(ctx, src)
-	case strings.HasSuffix(base, gzipx):
-		c.readname(base)
-		return nil
-	}
-
-	c.readname(base)
-	return nil
-}
-
-// readname appends the uncompressed filename to the Content struct.
-func (c *Content) readname(src string) {
-	c.Files = append(c.Files, GzipName(src))
-	c.Ext = gzipx
-}
-
 // GzipName returns the uncompressed base filename of the gzip archive.
 //
 // For example, if the base filename is `example.txt.gz`, the uncompressed filename is `example.txt`.
@@ -235,206 +152,4 @@ func GzipName(src string) string {
 		return base[:i]
 	}
 	return base
-}
-
-// readTarball extracts and reads the gzip compressed tarball archive.
-//
-// This is slower than other read methods as the tarball archive is
-// first decompressed to a temporary directory before being read.
-func (c *Content) readTarball(ctx context.Context, src string) (err error) {
-	const format = "read tarball %w"
-	tmp, err := helper.MkContent(src)
-	if err != nil {
-		return fmt.Errorf(format, err)
-	}
-	defer func() {
-		if cErr := os.RemoveAll(tmp); cErr != nil {
-			err = errors.Join(err, fmt.Errorf(format, cErr))
-		}
-	}()
-	x := Extractor{
-		Source:      src,
-		Destination: tmp,
-	}
-	if err := x.tarball(ctx); err != nil {
-		return fmt.Errorf(format, err)
-	}
-	s := strings.TrimSuffix(filepath.Base(src), gzipx)
-	name := filepath.Join(tmp, s)
-	inf, err := os.Stat(name)
-	if err != nil {
-		return fmt.Errorf(format, err)
-	}
-	if inf.IsDir() {
-		return fmt.Errorf(format, ErrFile)
-	}
-	ext, err := MagicExt(ctx, name)
-	if err != nil {
-		return fmt.Errorf(format, err)
-	}
-	if ext != tarx {
-		return nil
-	}
-	c.Ext = tarx
-	defer func() {
-		if cErr := os.Remove(name); cErr != nil {
-			err = errors.Join(err, fmt.Errorf(format, err))
-		}
-	}()
-	return c.Tar(ctx, name)
-}
-
-// Gzip decompresses a gzip file into x.Destination using the Go standard library.
-// If the archive is a .tar.gz tarball, targets filter extracted files;
-// otherwise, targets are ignored and the single file is extracted.
-// func (x Extractor) __Gzip(ctx context.Context, targets ...string) error {
-// 	if x.Destination == "" {
-// 		return ErrDest
-// 	}
-// 	if err := os.MkdirAll(x.Destination, 0o755); err != nil {
-// 		return fmt.Errorf("extract gzip mkdir: %w", err)
-// 	}
-//
-// 	f, err := os.Open(x.Source)
-// 	if err != nil {
-// 		return fmt.Errorf("extract gzip open: %w", err)
-// 	}
-// 	defer f.Close()
-//
-// 	gzr, err := gzip.NewReader(f)
-// 	if err != nil {
-// 		return fmt.Errorf("extract gzip header: %w", err)
-// 	}
-// 	defer gzr.Close()
-//
-// 	base := strings.ToLower(filepath.Base(x.Source))
-//
-// 	// Handle .tar.gz / .tgz tarball stream
-// 	if strings.HasSuffix(base, ".tar.gz") || strings.HasSuffix(base, ".tgz") {
-// 		return extractTarStream(ctx, gzr, x.Destination, targets)
-// 	}
-//
-// 	// Handle single .gz file stream
-// 	outName := gzr.Header.Name
-// 	if outName == "" {
-// 		outName = GzipName(x.Source)
-// 	}
-//
-// 	dstPath := filepath.Join(x.Destination, filepath.Base(outName))
-// 	out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-// 	if err != nil {
-// 		return fmt.Errorf("extract gzip create file: %w", err)
-// 	}
-// 	defer out.Close()
-//
-// 	if _, err := io.Copy(out, gzr); err != nil {
-// 		return fmt.Errorf("extract gzip decompress: %w", err)
-// 	}
-//
-// 	return nil
-// }
-
-// Gzip decompresses the source archive file to the destination directory.
-// The source file is expected to be a gzip compressed file. Unlike the other
-// container formats, [gzip] only compresses a single file.
-//
-// The targets are only used for the tarball gzip (.tar.gz) archive format,
-// otherwise it is ignored.
-//
-// [gzip]: https://www.gnu.org/software/gzip/
-// func (x Extractor) _Gzip(ctx context.Context, targets ...string) error {
-// 	m, err := x.gzip(ctx)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if m.magic == tgzx {
-// 		xtb, err := opentarball(ctx, m.name, x.Destination)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		return xtb.TempTar(ctx, targets...)
-// 	}
-// 	return nil
-// }
-
-// opentarball extracts the tarball archive from the gzip compressed file.
-func opentarball(ctx context.Context, name string, dest string) (Extractor, error) {
-	const format = "open tarball %w"
-	empty := Extractor{Source: "", Destination: ""}
-	dir := filepath.Dir(name)
-	tarball := filepath.Join(dir, GzipName(name))
-	_, err := os.Stat(tarball)
-	if err != nil {
-		return empty, fmt.Errorf(format, err)
-	}
-	magic, err := MagicExt(ctx, tarball)
-	if err != nil {
-		return empty, fmt.Errorf(format, err)
-	}
-	if magic != tarx {
-		return empty, nil
-	}
-	return Extractor{Source: tarball, Destination: dest}, nil
-}
-
-type method struct {
-	magic string
-	name  string
-}
-
-func (x Extractor) tarball(ctx context.Context, targets ...string) error {
-	m, err := x.gzip(ctx)
-	if err != nil {
-		return err
-	}
-	if m.magic == tgzx {
-		xtb, err := opentarball(ctx, m.name, x.Destination)
-		if err != nil {
-			return err
-		}
-		return xtb.Tar(ctx, targets...)
-	}
-	return nil
-}
-
-func (x Extractor) gzip(ctx context.Context) (method, error) {
-	const format = "extract gzip %w"
-	src, dst := x.Source, x.Destination
-	prog, err := exec.LookPath(command.Gzip)
-	if err != nil {
-		return method{}, fmt.Errorf(format, err)
-	}
-	if dst == "" {
-		return method{}, ErrDest
-	}
-
-	base := filepath.Base(src)
-	name := filepath.Join(dst, base)
-	_, err = helper.DuplicateOW(src, name)
-	if err != nil {
-		return method{}, fmt.Errorf(format, err)
-	}
-	magic, err := MagicExt(ctx, name)
-	if err != nil {
-		return method{}, fmt.Errorf(format, err)
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
-	defer cancel()
-	const (
-		decompress = "--decompress" // -d decompress
-		restore    = "--name"       // -n restore original name and timestamp
-		overwrite  = "--force"      // -f overwrite existing files
-	)
-	args := []string{decompress, restore, overwrite, name}
-	cmd := exec.CommandContext(ctx, prog, args...)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
-	if err = cmd.Run(); err != nil {
-		if buf.String() != "" {
-			return method{}, fmt.Errorf(format+": %s: %s", ErrProg, prog, strings.TrimSpace(buf.String()))
-		}
-		return method{}, fmt.Errorf(format+": %s", err, prog)
-	}
-	return method{magic, name}, nil
 }

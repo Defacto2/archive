@@ -16,7 +16,7 @@ import (
 // The format is credited to Alexander Roshal using the [unrar program].
 //
 // On Linux there are two versions of the unrar program, the freeware
-// version by Alexander Roshal and the feature incomplete [unrar-free].
+// version by Alexander Roshal and the feature incomplete unrar-free.
 // The freeware version is the recommended program for extracting RAR archives.
 //
 // [unrar program]: https://www.rarlab.com/rar_add.htm
@@ -58,7 +58,7 @@ func (c *Content) Rar(ctx context.Context, src string) error {
 // If the targets are empty then all files are extracted.
 //
 // On Linux there are two versions of the unrar program, the freeware
-// version by Alexander Roshal and the feature incomplete [unrar-free].
+// version by Alexander Roshal and the feature incomplete unrar-free.
 // The freeware version is the recommended program for extracting RAR archives.
 //
 // [unrar program]: https://www.rarlab.com/rar_add.htm

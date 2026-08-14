@@ -74,13 +74,3 @@ func TestTarExtractor(t *testing.T) {
 		})
 	}
 }
-
-func TestBSDTar(t *testing.T) {
-	t.Parallel()
-
-	input := []byte("folder/\r\nfolder/file1.txt\r\nfile2.jpg\n\n")
-	got := archive.BSDTar(input)
-
-	want := []string{"folder/", "folder/file1.txt", "file2.jpg"}
-	be.Equal(t, got, want)
-}

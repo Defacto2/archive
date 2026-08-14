@@ -8,8 +8,6 @@ import (
 	"github.com/nalgeon/be"
 )
 
-// TODO: test withfullpaths flag
-
 const (
 	TestRar1 = "RAR250.RAR"
 )

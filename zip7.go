@@ -130,14 +130,6 @@ func (x Extractor) Zip7(ctx context.Context, targets ...string) error {
 		return fmt.Errorf(format, "look path", err)
 	}
 
-	// restrict extraction strictly to 7z magic format
-	ext, err := MagicExt(ctx, src)
-	if err != nil {
-		return fmt.Errorf(format, "magic check "+src, err)
-	} else if ext != zip7x {
-		return fmt.Errorf(format, "magic check "+src, ErrExt)
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
 

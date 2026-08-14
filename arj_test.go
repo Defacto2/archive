@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	TestArj1 = "ARJ020B"
+	TestArjX = "ARJ020B" // the arj tool requires a file extension
 	TestArj2 = "ARJ020B.ARJ"
 )
 
@@ -20,7 +20,7 @@ func TestArjContent(t *testing.T) {
 		filename string
 		wantErr  bool
 	}{
-		{TestArj1, false},
+		{TestArjX, false},
 		{TestArj2, false},
 	}
 
@@ -54,7 +54,7 @@ func TestArjExtractor(t *testing.T) {
 		filename string
 		wantErr  bool
 	}{
-		{TestArj1, false},
+		{TestArjX, false},
 		{TestArj2, false},
 	}
 

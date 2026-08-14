@@ -19,26 +19,18 @@ import (
 //   - the unarchiver app: https://theunarchiver.com/
 //   - unar command line tool: https://theunarchiver.com/command-line
 func (c *Content) Lsar(ctx context.Context, src string) error {
-	const format = `content lsar %w`
-	prog, err := exec.LookPath(command.Lsar)
-	if err != nil {
-		return fmt.Errorf(format, err)
-	}
-
+	const format = "content lsar %s %w"
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, prog, src, "-json")
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
 
-	out, err := cmd.Output()
+	out, err := c.Run(ctx, src, command.Lsar, src, "-json")
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "exec", err)
 	}
 
-	c.Ext, c.Files, err = Lsar(out)
+	c.Files, err = Lsar(out)
 	if err != nil {
-		return fmt.Errorf(format, err)
+		return fmt.Errorf(format, "parse json", err)
 	}
 	return nil
 }
@@ -55,10 +47,10 @@ type LsarJSON struct {
 //
 // It returns an empty string for use with the [Content.Ext]
 // and a string slice with the filenames for [Content.Files].
-func Lsar(data []byte) (string, []string, error) {
+func Lsar(data []byte) ([]string, error) {
 	var out LsarJSON
 	if err := json.Unmarshal(data, &out); err != nil {
-		return "", nil, fmt.Errorf("json unmarshal: %w", err)
+		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 	names := make([]string, 0, len(out.Contents))
 	for _, entry := range out.Contents {
@@ -66,8 +58,7 @@ func Lsar(data []byte) (string, []string, error) {
 			names = append(names, entry.FileName)
 		}
 	}
-	const ext = ""
-	return ext, names, nil
+	return names, nil
 }
 
 // Unar extracts the targets from the source of multiple archive types.
@@ -83,26 +74,40 @@ func Lsar(data []byte) (string, []string, error) {
 //   - unar command line tool: https://theunarchiver.com/command-line
 func (x Extractor) Unar(ctx context.Context, targets ...string) error {
 	const fmtext = "extract unar %w"
-	src, dst := x.Source, x.Destination
 	prog, err := exec.LookPath(command.Unar)
 	if err != nil {
 		return fmt.Errorf(fmtext, err)
 	}
+
+	src, dst := x.Source, x.Destination
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
+
+	const (
+		forceOverwrite  = "-force-overwrite"
+		noDirectory     = "-no-directory"
+		outputDirectory = "-output-directory"
+	)
+	const size = 5
 	// example command: unar -quiet -no-directory -copy-time -force-overwrite -output-directory <destdir> archive [items]
-	args := []string{"-force-overwrite", "-no-directory", "-output-directory", dst, src}
+	arg := make([]string, 0, size+len(targets))
+	arg = append(arg, forceOverwrite, noDirectory, outputDirectory, dst, src)
 	if len(targets) > 0 {
-		args = append(args, targets...)
+		arg = append(arg, targets...)
 	}
-	const format = fmtext + `: %s: cmd errors: '%s' cmd out: '%s'`
+
 	// Usage: unar [options] archive [files ...]
-	cmd := exec.CommandContext(ctx, prog, args...)
-	var buf bytes.Buffer
-	cmd.Stderr = &buf
+	cmd := exec.CommandContext(ctx, prog, arg...)
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	b, err := cmd.Output()
+
 	cmdout := strings.ReplaceAll(strings.TrimSpace(string(b)), "\n", " ")
-	cmderr := strings.TrimSpace(buf.String())
+	cmderr := strings.TrimSpace(stderrBuf.String())
+
+	const format = fmtext + `: %s: cmd errors: '%s' cmd out: '%s'`
+
 	if err != nil {
 		const filefailOkay = "Opening file failed"
 		if strings.Contains(cmdout, filefailOkay) {

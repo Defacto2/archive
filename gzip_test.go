@@ -51,6 +51,40 @@ func TestGzipContent(t *testing.T) {
 	}
 }
 
+func TestGzipTarContent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		filename  string
+		wantCount int
+		wantExt   string
+		wantErr   bool
+	}{
+		{TestGzip1, 3, ".tar", false},
+		{TestGzip2, 1, "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			t.Parallel()
+
+			src := filepath.Join(testdata, tt.filename)
+			var c archive.Content
+			err := c.GzipTar(t.Context(), src)
+			if tt.wantErr {
+				be.Err(t, err)
+				return
+			}
+
+			be.Err(t, err, nil)
+
+			count := len(c.Files)
+			be.Equal(t, c.Ext, tt.wantExt)
+			be.Equal(t, count, tt.wantCount)
+		})
+	}
+}
+
 func TestGzExtractor(t *testing.T) {
 	t.Parallel()
 

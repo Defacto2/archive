@@ -1,122 +1,249 @@
 package archive
 
 import (
+	"archive/tar"
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
-	"os/exec"
-	"slices"
+	"path/filepath"
 	"strings"
-
-	"github.com/Defacto2/archive/command"
+	"time"
 )
 
-// Package file tar.go contains the BSD Tar compression methods.
+// TODO: create more tar tests
+// bsdtar -c --format "ustar" "pax" etc
 
-// Tar returns the content of the Tar archive using the [bsdtar program].
-//
-// [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
+// Package file tar.go contains the Tape ARchives methods.
+
+// Tar returns the content of a TAR archive.
 func (c *Content) Tar(ctx context.Context, src string) error {
 	const format = "content tar %s %w"
-	const file = command.BSDTar
-	prog, err := exec.LookPath(file)
+
+	file, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf(format, "look path", err)
+		return fmt.Errorf(format, "open src", err)
 	}
+	defer file.Close()
 
-	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
-	defer cancel()
+	hdr := tar.NewReader(file)
 
-	const list = "-t"
-	const location = "-f"
-	out, err := c.Run(ctx, file, prog, list, location, src)
-	if err != nil {
-		return err
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf(format, "timeout", ctx.Err())
+		default:
+		}
+
+		header, err := hdr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf(format, "read entry", err)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			continue
+		case tar.TypeReg:
+			c.Files = append(c.Files, header.Name)
+		}
 	}
-
-	if len(out) == 0 {
-		return ErrRead
+	if len(c.Files) > 0 {
+		c.Ext = tarx
 	}
-
-	c.Files = BSDTar(out)
-	c.Ext = tarx
 	return nil
 }
 
-// BSDTar splits raw tar -tf output into clean, normalized filenames.
-func BSDTar(out []byte) []string {
-	files := strings.Split(string(out), "\n")
-	files = slices.DeleteFunc(files, func(s string) bool {
-		return strings.TrimSpace(s) == ""
-	})
-	for i, f := range files {
-		files[i] = strings.TrimRight(f, "\r")
-	}
-	return files
+// Tar extracts the content of the Tar archive.
+// If the targets are empty then all files are extracted.
+// Any errors with the archive or its content are ignored.
+func (x Extractor) Tar(ctx context.Context, targets ...string) error {
+	logger := slog.New(slog.DiscardHandler)
+	return x.TarWithLogger(ctx, logger, targets...)
 }
 
-// Tar extracts the content of the Tar archive using the [bsdtar program].
+// TarWithLogger extracts the content of the Tar archive and reports any
+// archive or extraction errors to the logger.
 // If the targets are empty then all files are extracted.
-//
-// bsdtar uses the performant [libarchive library] for archive extraction:
-//
-// gzip, bzip2, compress, xz, lzip, lzma, tar, iso9660, zip, ar, xar,
-// lha/lzh, rar, rar v5, Microsoft Cabinet, 7-zip.
-//
-// [bsdtar program]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
-// [libarchive library]: http://www.libarchive.org/
-func (x Extractor) Tar(ctx context.Context, targets ...string) error {
-	const format = `extract tar %s %w`
-	const file = command.BSDTar
+func (x Extractor) TarWithLogger(ctx context.Context, logger *slog.Logger, targets ...string) error {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 
-	src, dst := x.Source, x.Destination
-	if dst == "" {
+	const msg = "extract tar"
+	const format = msg + " %s %w"
+	if x.Destination == "" {
+		logger.Error(msg + " extractor.destination is empty")
 		return ErrDest
 	}
 
-	prog, err := exec.LookPath(file)
+	f, err := os.Open(x.Source)
 	if err != nil {
-		return fmt.Errorf(format, "look path", err)
+		logger.Error(msg+" cannot open extractor.source",
+			slog.String("source", x.Source), slog.Any("error", err))
+		return fmt.Errorf(format, "open source", err)
 	}
+	defer f.Close()
 
-	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
-	defer cancel()
-
-	// note: BSD tar uses different flags to GNU tar
-	const (
-		extract     = "-x"                    // -x extract files
-		source      = "--file"                // --file path to archive
-		targetDir   = "--cd"                  // --cd target directory
-		noAcls      = "--no-acls"             // --no-acls disable ACLs
-		noFlags     = "--no-fflags"           // --no-fflags disable file flags
-		noModTime   = "--modification-time"   // --modification-time
-		noSafeW     = "--no-safe-writes"      // --no-safe-writes
-		noOwner     = "--no-same-owner"       // --no-same-owner
-		noPerms     = "--no-same-permissions" // --no-same-permissions
-		noXattrs    = "--no-xattrs"           // --no-xattrs disable extended attributes
-		stopParsing = "--"                    // -- stop parsing switches
-	)
-
-	const size = 13
-	arg := make([]string, 0, size+len(targets))
-	arg = append(arg, extract, source, src, noAcls, noFlags, noSafeW, noModTime,
-		noOwner, noPerms, noXattrs, targetDir, dst, stopParsing)
-	arg = append(arg, targets...)
-
-	return x.Run(ctx, file, prog, arg...)
+	return x.tarReader(ctx, logger, f, targets...)
 }
 
-// TempTar functions like Tar but removes the source tarball after extraction.
-func (x Extractor) TempTar(ctx context.Context, targets ...string) (err error) {
-	tarball := x.Source
-	if tarball != "" {
-		defer func() {
-			if cErr := os.Remove(tarball); cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
-				const format = "cannot remove temptar: %w"
-				err = errors.Join(err, fmt.Errorf(format, cErr))
-			}
-		}()
+func (x Extractor) tarReader(ctx context.Context, logger *slog.Logger, r io.Reader, targets ...string) error {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
 	}
-	return x.Tar(ctx, targets...)
+
+	const msg = "extract tar"
+	const format = msg + " %s %w"
+	logErr := func(s string, err error) {
+		logger.Error(msg+""+s, slog.Any("error", err))
+	}
+
+	src := tar.NewReader(r)
+	for {
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			logErr("reader timed out", err)
+			return fmt.Errorf(format, "timeout", err)
+		default:
+		}
+
+		hdr, err := src.Next()
+		if errors.Is(err, io.EOF) {
+			logger.Debug(msg + " reached the end of the archive")
+			break
+		}
+		if err != nil {
+			logErr("cannot read header", err)
+			return fmt.Errorf(format, "reader header", err)
+		}
+		if skipName(hdr.Name, targets...) {
+			logger.Info(msg+" skipping entry", slog.String("name", hdr.Name))
+			continue
+		}
+
+		local := Localize(hdr.Name)
+		if local != hdr.Name {
+			logger.Info(msg+" renamed entry",
+				slog.String("stored name", hdr.Name), slog.String("extracted name", local))
+		}
+		path := filepath.Join(x.Destination, local)
+		x.tarEntry(logger, src, hdr, path)
+	}
+
+	return nil
+}
+
+func (x Extractor) tarEntry(
+	logger *slog.Logger, src *tar.Reader, hdr *tar.Header, path string,
+) {
+	if logger == nil || src == nil || hdr == nil {
+		return
+	}
+
+	const msg = "extract tar entry cannot "
+	logPaths := slog.Group("paths",
+		slog.String("header name", hdr.Name), slog.String("path", path),
+	)
+	logErr := func(s string, err error) {
+		logger.Error(msg+s, logPaths, slog.Any("error", err))
+	}
+
+	switch hdr.Typeflag {
+	case tar.TypeLink, tar.TypeSymlink, tar.TypeChar, tar.TypeBlock, tar.TypeFifo:
+		logger.Debug(msg+"skipping node or link entry", logPaths)
+	case tar.TypeDir:
+		const perm = DirWriteReadRead
+		if err := os.MkdirAll(path, perm); err != nil {
+			logErr("make a directory", err)
+			return
+		}
+	case tar.TypeReg:
+		perm := DirWriteReadRead
+		parent := filepath.Dir(path)
+		if err := os.MkdirAll(parent, perm); err != nil {
+			logErr("make parent directory", err)
+			return
+		}
+		const flag = WriteRead
+		perm = hdr.FileInfo().Mode()
+		dst, err := os.OpenFile(path, flag, perm)
+		if err != nil {
+			logErr("open file", err)
+			return
+		}
+
+		if hdr.Size < 0 {
+			logErr("opened size", ErrSize)
+			return
+		}
+		n, err := io.CopyN(dst, src, hdr.Size)
+		cErr := dst.Close()
+		if err != nil {
+			logErr("copy file", err)
+			return
+		}
+		if cErr != nil {
+			logErr("flush destination file", cErr)
+			return
+		}
+		logger.Debug(msg+" extracted file",
+			slog.String("created path", path), slog.Int64("bytes written", n))
+
+		if err := tarTimes(logger, hdr, path); err != nil {
+			logErr("set access times", err)
+		}
+	}
+}
+
+func tarTimes(logger *slog.Logger, hdr *tar.Header, path string) error {
+	if logger == nil || hdr == nil {
+		return nil
+	}
+	atime := hdr.AccessTime
+	mtime := hdr.ModTime
+	if mtime.IsZero() {
+		mtime = time.Now()
+	}
+	if atime.IsZero() {
+		atime = mtime
+	}
+	if err := os.Chtimes(path, atime, mtime); err != nil {
+		return fmt.Errorf("tar times %w", err)
+	}
+	return nil
+}
+
+// IsTar returns true if the reader is a supported tar format.
+func IsTar(r *bufio.Reader) bool {
+	if r == nil {
+		return false
+	}
+	const size = 512
+	peek, err := r.Peek(size)
+	if err != nil || len(peek) < size {
+		return false
+	}
+
+	const prefix = "ustar"
+	magic := string(peek[257:263])
+	if strings.HasPrefix(magic, prefix) {
+		return true
+	}
+
+	// legacy tar archives
+	// pass a copy of the peeked header bytes into standard tar.Reader
+	tr := tar.NewReader(bytes.NewReader(peek))
+	hdr, err := tr.Next()
+	if err != nil || hdr == nil {
+		return false
+	}
+	return hdr.Name != "" && (hdr.Mode > 0 || hdr.Size >= 0)
 }
