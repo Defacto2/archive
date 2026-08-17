@@ -114,6 +114,7 @@ func TestZipExtractor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.filename, func(t *testing.T) {
 			t.Parallel()
+			t.Log("Test ZipWithLogger on", TestPK1)
 
 			src := filepath.Join(testdata, tt.filename)
 			x := archive.Extractor{
@@ -121,6 +122,38 @@ func TestZipExtractor(t *testing.T) {
 				Destination: t.TempDir(),
 			}
 			err := x.ZipWithLogger(t.Context(), sl)
+			if tt.wantErr {
+				be.Err(t, err)
+			} else {
+				be.Err(t, err, nil)
+			}
+			testingXMixes(t, x.Destination)
+		})
+	}
+}
+
+func TestZipStrictExtractor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		filename string
+		wantErr  bool
+	}{
+		{TestPK1, false},
+		{TestPK2, false},
+		{TestPK3, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			t.Parallel()
+
+			src := filepath.Join(testdata, tt.filename)
+			x := archive.Extractor{
+				Source:      src,
+				Destination: t.TempDir(),
+			}
+			err := x.ZipStrict(t.Context())
 			if tt.wantErr {
 				be.Err(t, err)
 			} else {
