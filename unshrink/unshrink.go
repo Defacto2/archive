@@ -22,10 +22,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sync"
 )
-
-// ErrOverflow is returned when an integer cannot be safely wrapped to a new type.
-var ErrOverflow = errors.New("integer overflow")
 
 const Unshrink uint16 = 1 // Method 1: Shrink/Unshink
 
@@ -36,27 +34,37 @@ const (
 	minCodeSize  = 9
 )
 
+// ErrOverflow is returned when an integer cannot be safely wrapped to a new type.
+var ErrOverflow = errors.New("unshink: integer overflow")
+
+//nolint:gochecknoglobals
+var registerOnce sync.Once
+
 // Register the [Unshrink] method globally for [archive/zip].
 func Register() {
-	zip.RegisterDecompressor(Unshrink, dcomp)
+	registerOnce.Do(func() {
+		zip.RegisterDecompressor(Unshrink, dcomp)
+	})
 }
 
 type unshrink struct {
-	r         io.ByteReader
-	stackTop  int
-	bitCount  uint
-	codeSize  uint
+	r        io.ByteReader
+	stackTop int
+	bitCount uint
+	codeSize uint
+
 	bits      uint32
 	freeCode  uint16
 	lastCode  uint16
 	firstChar byte
-	prefix    [8192]uint16
-	suffix    [8192]byte
-	stack     [8192]byte
-	used      [8192]bool
+
+	prefix [maxCode]uint16
+	suffix [maxCode]byte
+	stack  [maxCode]byte
+	used   [maxCode]bool
 }
 
-// dcomp returns an [io.ReadCloser] that decodes method 1 (Unshrink) streams.
+// dcomp returns an [io.ReadCloser] that decompresses method 1 (Unshrink) streams.
 func dcomp(r io.Reader) io.ReadCloser {
 	br, ok := r.(io.ByteReader)
 	if !ok {
@@ -72,10 +80,10 @@ func dcomp(r io.Reader) io.ReadCloser {
 		freeCode:  initFreeCode,
 		lastCode:  math.MaxUint16,
 		firstChar: 0,
-		prefix:    [8192]uint16{},
-		suffix:    [8192]byte{},
-		stack:     [8192]byte{},
-		used:      [8192]bool{},
+		prefix:    [maxCode]uint16{},
+		suffix:    [maxCode]byte{},
+		stack:     [maxCode]byte{},
+		used:      [maxCode]bool{},
 	}
 
 	// empty prefix table
