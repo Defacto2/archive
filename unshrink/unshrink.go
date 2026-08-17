@@ -24,14 +24,10 @@ import (
 	"math"
 )
 
+// ErrOverflow is returned when an integer cannot be safely wrapped to a new type.
 var ErrOverflow = errors.New("integer overflow")
 
-const Unshrink uint16 = 1
-
-// Register the [Unshrink] method globally for [archive/zip].
-func Register() {
-	zip.RegisterDecompressor(Unshrink, dcomp)
-}
+const Unshrink uint16 = 1 // Method 1: Shrink/Unshink
 
 const (
 	controlCode  = 256
@@ -39,6 +35,11 @@ const (
 	maxCode      = 8192
 	minCodeSize  = 9
 )
+
+// Register the [Unshrink] method globally for [archive/zip].
+func Register() {
+	zip.RegisterDecompressor(Unshrink, dcomp)
+}
 
 type unshrink struct {
 	r         io.ByteReader

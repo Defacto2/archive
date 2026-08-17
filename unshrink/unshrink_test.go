@@ -2,6 +2,7 @@ package unshrink_test
 
 import (
 	"archive/zip"
+	"hash/crc32"
 	"io"
 	"math"
 	"os"
@@ -19,6 +20,7 @@ const (
 	testFile    = "example-s.zip"
 	extractSize = 2_048
 	extractName = "S.BIN"
+	extractCRC  = 0x8314ddd9
 )
 
 func TestUnshrink(t *testing.T) {
@@ -30,6 +32,7 @@ func TestUnshrink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for n, f := range rc.File {
 		fr, err := f.Open()
 		if err != nil {
@@ -41,9 +44,7 @@ func TestUnshrink(t *testing.T) {
 			t.Fatal(f.Name, err)
 		}
 		name := filepath.Join(tmp, s)
-		const wr = 578
-		const wwr = 436
-		dst, err := os.OpenFile(name, wr, wwr)
+		dst, err := os.Create(name)
 		if err != nil {
 			fr.Close()
 			t.Fatal(name, err)
@@ -54,13 +55,17 @@ func TestUnshrink(t *testing.T) {
 			size = int64(f.UncompressedSize64)
 		}
 
-		wrote, err := io.CopyN(dst, fr, size)
+		hasher := crc32.NewIEEE()
+		mw := io.MultiWriter(dst, hasher)
+
+		wrote, err := io.CopyN(mw, fr, size)
 		if err != nil {
 			fr.Close()
 			dst.Close()
-			be.Err(t, err, nil)
+			t.Fatal(name, wrote, err)
 		}
 		be.Equal(t, wrote, extractSize)
+		be.Equal(t, hasher.Sum32(), uint32(extractCRC))
 
 		st, err := os.Stat(name)
 		be.Err(t, err, nil)
