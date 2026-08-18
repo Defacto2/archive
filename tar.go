@@ -220,8 +220,8 @@ func tarTimes(logger *slog.Logger, hdr *tar.Header, path string) error {
 	return nil
 }
 
-// IsTar returns true if the reader is a supported tar format.
-func IsTar(r *bufio.Reader) bool {
+// supportedTar returns true if the reader is a supported tar format.
+func supportedTar(r *bufio.Reader) bool {
 	if r == nil {
 		return false
 	}

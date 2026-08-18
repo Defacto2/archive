@@ -40,13 +40,13 @@ func (c *Content) LHA(ctx context.Context, src string) error {
 		return ErrRead
 	}
 
-	c.Files = LHAs(out)
+	c.Files = lhas(out)
 	c.Ext = lhax
 	return nil
 }
 
-// LHAs parses the output of the lha list command and returns the listed filenames.
-func LHAs(out []byte) []string {
+// lhas parses the output of the lha list command and returns the listed filenames.
+func lhas(out []byte) []string {
 	var files []string
 	listTable := false
 	listIndex := -1

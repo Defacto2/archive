@@ -16,7 +16,7 @@ const (
 func TestLsar(t *testing.T) {
 	t.Parallel()
 	noSupport := []string{"Zstandard"}
-	for _, tt := range Tests() { //nolint:varnamelen
+	for _, tt := range Tests(t) { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)
@@ -39,7 +39,7 @@ func TestLsar(t *testing.T) {
 func TestUnar(t *testing.T) {
 	t.Parallel()
 	noSupport := []string{"Reduce ZIP", "Shrink ZIP", "Zstandard"}
-	for _, tt := range Tests() { //nolint:varnamelen
+	for _, tt := range Tests(t) { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join("testdata", tt.Filename)

@@ -50,13 +50,13 @@ func (c *Content) ARC(ctx context.Context, src string) error {
 		return ErrRead
 	}
 
-	c.Files = ARCs(out)
+	c.Files = arcs(out)
 	c.Ext = arcx
 	return nil
 }
 
-// ARCs parses the output of the arc list command and returns the listed filenames.
-func ARCs(out []byte) []string {
+// arcs parses the output of the arc list command and returns the listed filenames.
+func arcs(out []byte) []string {
 	var files []string
 	listTable := false
 

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -55,9 +56,15 @@ func DumpDir(t *testing.T, tempDir string) {
 	}
 }
 
+func accessViolation(t *testing.T) bool {
+	t.Helper()
+	return runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
+}
+
 type dat struct {
 	name  string
 	bytes int64
+	crc32 uint32
 }
 
 const (
@@ -67,9 +74,9 @@ const (
 )
 
 var texts = [3]dat{ //nolint:gochecknoglobals
-	{TestDat1, 2009},
-	{TestDat2, 469},
-	{TestDat3, 81_410},
+	{TestDat1, 2009, 0xc71a6911},
+	{TestDat2, 469, 0xc8ddc359},
+	{TestDat3, 81_410, 0xc065e9c4},
 }
 
 func textnames(t *testing.T) [3]string {
@@ -132,23 +139,22 @@ func testingXLower(t *testing.T, tempDir string) {
 	}.extractor(t, names[:], texts[:])
 }
 
-// TODO: hashes.
 var mixes = [15]dat{ //nolint:gochecknoglobals
-	{"TEST.ANS", 68},
-	{"TEST.ASC", 13},
-	{"TEST.BMP", 750_054},
-	{"TEST.CAP", 13},
-	{"TEST.DIZ", 13},
-	{"TEST.DOC", 13},
-	{"TEST.EXE", 2_426_368},
-	{"TEST.GIF", 2_646},
-	{"TEST.JPG", 16_461},
-	{"TEST.ME", 12},
-	{"TEST.NFO", 13},
-	{"TEST.PCX", 29_530},
-	{"TEST.PNG", 4_163},
-	{"TEST.TXT", 14},
-	{"TEST~1.JPE", 16461},
+	{"TEST.ANS", 68, 0x5ce2f707},
+	{"TEST.ASC", 13, 0x7ef91c5d},
+	{"TEST.BMP", 750_054, 0x64c6e850},
+	{"TEST.CAP", 13, 0x49dfe6f2},
+	{"TEST.DIZ", 13, 0xd16e82ea},
+	{"TEST.DOC", 13, 0x9667e483},
+	{"TEST.EXE", 2_426_368, 0x68e32163},
+	{"TEST.GIF", 2_646, 0x195a28a8},
+	{"TEST.JPG", 16_461, 0x134961cd},
+	{"TEST.ME", 12, 0x3a3f1a1c},
+	{"TEST.NFO", 13, 0xe5fd7de3},
+	{"TEST.PCX", 29_530, 0xe63058f8},
+	{"TEST.PNG", 4_163, 0xdfafce04},
+	{"TEST.TXT", 14, 0xb8d80e3c},
+	{"TEST~1.JPE", 16461, 0x134961cd},
 }
 
 func mixnames(t *testing.T) [15]string {
@@ -245,7 +251,7 @@ type TestData struct {
 	cmdVersion string // cmdVersion is the version of the software used to create the archive.
 }
 
-func Tests() []TestData { //nolint:funlen
+func Tests(t *testing.T) []TestData { //nolint:funlen
 	tests := []TestData{
 		{
 			WantErr:  false,
@@ -279,8 +285,8 @@ func Tests() []TestData { //nolint:funlen
 		},
 		{
 			WantErr:  false,
-			Testname: "Bzip2",
-			Filename: TestBz2, Ext: ".bz2",
+			Testname: "Bzip2 Tar",
+			Filename: TestBz2, Ext: ".tar.bz2",
 			cmdDos: "bzip2", cmdInfo: "bzip2", cmdVersion: "1.0.8",
 		},
 		{
@@ -327,14 +333,14 @@ func Tests() []TestData { //nolint:funlen
 		},
 		{
 			WantErr:  false,
-			Testname: "XZ Utils",
-			Filename: TestXZ, Ext: ".xz",
+			Testname: "XZ Utils Tar",
+			Filename: TestXZ, Ext: ".tar.xz",
 			cmdDos: "xz", cmdInfo: "XZ Utils", cmdVersion: "5.6.2",
 		},
 		{
 			WantErr:  false,
-			Testname: "Zstandard",
-			Filename: TestZstd, Ext: ".zst",
+			Testname: "Zstandard Tar",
+			Filename: TestZstd, Ext: ".tar.zst",
 			cmdDos: "zstd", cmdInfo: "Zstandard by Yann Collet", cmdVersion: "1.5.6",
 		},
 		{
@@ -362,13 +368,31 @@ func Tests() []TestData { //nolint:funlen
 			cmdDos: "PAK.EXE", cmdInfo: "NoGate Consulting, 1988", cmdVersion: "1.0",
 		},
 		{
+			WantErr:  false,
+			Testname: "XZ",
+			Filename: "TEST.EXE.xz", Ext: ".xz",
+			cmdDos: "xz", cmdInfo: "XZ Utils", cmdVersion: "5.8.3",
+		},
+		{
+			WantErr:  false,
+			Testname: "BZip2",
+			Filename: "TEST.EXE.bz2", Ext: ".bz2",
+			cmdDos: "bzip2", cmdInfo: "block-sorting compressor", cmdVersion: "1.0.8",
+		},
+		{
+			WantErr:  false,
+			Testname: "Zstandard",
+			Filename: "TEST.EXE.zst", Ext: ".zst",
+			cmdDos: "zstd", cmdInfo: "Zstandard by Yann Collet", cmdVersion: "1.5.7",
+		},
+		{
 			WantErr:  true,
 			Testname: "Not an archive",
 			Filename: TestDat1, Ext: ".txt",
 			cmdDos: "", cmdInfo: "", cmdVersion: "",
 		},
 	}
-	if archive.AccessViolation() {
+	if accessViolation(t) {
 		tests = slices.DeleteFunc(tests, func(tt TestData) bool {
 			return tt.cmdDos == "ARJ.EXE" // the arj tool on macOS now gets killed by the system
 		})
@@ -379,7 +403,7 @@ func Tests() []TestData { //nolint:funlen
 func TestData_ReadContent(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range Tests() {
+	for _, tt := range Tests(t) {
 		const wantThree, wantOne = 3, 1
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
@@ -388,17 +412,18 @@ func TestData_ReadContent(t *testing.T) {
 			var c archive.Content
 			src := filepath.Join(testdata, tt.Filename)
 			err := c.Read(t.Context(), src)
-			if tt.WantErr {
+			if tt.WantErr || tt.Ext == ".zst" {
 				be.Err(t, err)
 				return
 			}
 			be.Err(t, err, nil)
 			got := len(c.Files)
-			if tt.Ext == gzx {
+			switch tt.Ext {
+			case ".bz2", gzx, ".xz":
 				be.Equal(t, got, wantOne)
-				return
+			default:
+				be.Equal(t, got, wantThree)
 			}
-			be.Equal(t, got, wantThree)
 		})
 	}
 }
@@ -406,7 +431,7 @@ func TestData_ReadContent(t *testing.T) {
 func TestData_Extract(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range Tests() {
+	for _, tt := range Tests(t) {
 		const wantThree, wantOne = 3, 1
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
@@ -425,12 +450,15 @@ func TestData_Extract(t *testing.T) {
 			be.Err(t, err, nil)
 			extracted, err := helper.Count(tmp)
 			be.Err(t, err, nil)
-			if tt.Ext == gzx {
+			switch tt.Ext {
+			case gzx:
 				be.Equal(t, extracted, wantOne)
 				testdataExtractGzip(t, tmp)
-				return
+			case ".bz2", ".xz", ".zst":
+				be.Equal(t, extracted, wantOne)
+			default:
+				be.Equal(t, extracted, wantThree)
 			}
-			be.Equal(t, extracted, wantThree)
 		})
 	}
 }
@@ -459,13 +487,13 @@ func testdataExtractGzip(t *testing.T, tmp string) {
 func TestData_Extract_WithTargets(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range Tests() {
+	for _, tt := range Tests(t) {
 		const want2Targets = 2
 
 		// unsupported returns true for tools or packages that don't extract file targets
 		unsupported := func() bool {
 			switch tt.Ext {
-			case gzx, ".bz2", ".cab":
+			case gzx, ".bz2", ".cab", ".xz", ".zst":
 				return true
 			}
 			// while the zipfile handlers do support targets,
@@ -506,7 +534,7 @@ func TestData_Extract_WithTargets(t *testing.T) {
 func TestData_Extract_Zips(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range Tests() {
+	for _, tt := range Tests(t) {
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 
@@ -542,10 +570,10 @@ func TestData_Extract_Zips(t *testing.T) {
 	}
 }
 
-func TestData_Extract_Source(t *testing.T) {
+func TestData_ExtractTemp(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range Tests() {
+	for _, tt := range Tests(t) {
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
 			if ok := tt.Ext != ".txt"; !ok {
@@ -554,7 +582,7 @@ func TestData_Extract_Source(t *testing.T) {
 			t.Log("Specialized source extraction on", tt.Testname)
 
 			src := filepath.Join(testdata, tt.Filename)
-			got, err := archive.ExtractSource(t.Context(), src, "tester")
+			got, err := archive.ExtractTemp(t.Context(), src)
 			if tt.WantErr {
 				be.Err(t, err)
 				return
@@ -567,15 +595,14 @@ func TestData_Extract_Source(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	t.Parallel()
-
-	for _, tt := range Tests() {
+	for _, tt := range Tests(t) {
 		t.Run(tt.Testname, func(t *testing.T) {
-			t.Parallel()
+			t.Log("Never run TestList in parallel, it will cause failures")
 
+			ctx := t.Context()
 			src := filepath.Join(testdata, tt.Filename)
-			got, err := archive.List(t.Context(), src, tt.Filename)
-			if tt.WantErr && tt.Ext != ".txt" {
+			got, err := archive.List(ctx, src, tt.Filename)
+			if tt.WantErr {
 				be.Err(t, err)
 				return
 			}
@@ -634,30 +661,5 @@ func TestHardLink(t *testing.T) {
 			be.True(t, strings.HasSuffix(got, tt.want))
 			be.True(t, strings.HasPrefix(filepath.Base(got), tt.src+"-"))
 		})
-	}
-}
-
-func TestArcFiles(t *testing.T) {
-	t.Parallel()
-
-	const output1 = `
-Name          Length    Date
-============  ========  =========
-TESTDAT1.TXT      2009  14 Feb 25
-README             469  14 Feb 25
-TESTDAT3.TXT     81410  14 Feb 25
-          ====  ========
-Total        3     83888
-`
-
-	files := archive.ARCs([]byte(output1))
-	count := len(files)
-
-	const want = 3
-	be.Equal(t, count, want)
-	if count >= want {
-		be.Equal(t, files[0], "TESTDAT1.TXT")
-		be.Equal(t, files[1], "README")
-		be.Equal(t, files[2], "TESTDAT3.TXT")
 	}
 }

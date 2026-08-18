@@ -28,27 +28,27 @@ func (c *Content) Lsar(ctx context.Context, src string) error {
 		return fmt.Errorf(format, "exec", err)
 	}
 
-	c.Files, err = Lsar(out)
+	c.Files, err = lsars(out)
 	if err != nil {
 		return fmt.Errorf(format, "parse json", err)
 	}
 	return nil
 }
 
-// LsarJSON stores selective metadata from the lsar JSON format.
-type LsarJSON struct {
+// lsarJSON stores selective metadata from the lsar JSON format.
+type lsarJSON struct {
 	Format   string `json:"lsarFormatName"`
 	Contents []struct {
 		FileName string `json:"XADFileName"` //nolint:tagliatelle
 	} `json:"lsarContents"`
 }
 
-// Lsar parses the output from the lsar command with the "-json" flag.
+// lsars parses the output from the lsar command with the "-json" flag.
 //
 // It returns an empty string for use with the [Content.Ext]
 // and a string slice with the filenames for [Content.Files].
-func Lsar(data []byte) ([]string, error) {
-	var out LsarJSON
+func lsars(data []byte) ([]string, error) {
+	var out lsarJSON
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}

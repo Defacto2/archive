@@ -13,7 +13,7 @@ import (
 )
 
 // Package file arj.go contains the ARJ compression methods.
-//
+
 // ARJ returns the content of the src ARJ archive.
 // The format credited to Robert Jung using the [arj program].
 //
@@ -68,12 +68,12 @@ func (c *Content) ARJ(ctx context.Context, src string) (err error) {
 	}
 
 	c.Ext = arjx
-	c.Files = ARJs(out)
+	c.Files = arjs(out)
 	return nil
 }
 
-// ARJs parses the output of the arj list command and returns the listed filenames.
-func ARJs(out []byte) []string {
+// arjs parses the output of the arj list command and returns the listed filenames.
+func arjs(out []byte) []string {
 	var files []string
 	listTable := false
 

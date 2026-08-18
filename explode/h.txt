@@ -1,0 +1,1 @@
+ok  	github.com/Defacto2/archive/explode	0.003s

@@ -27,10 +27,10 @@ import (
 
 // Package file zip.go contains the ZIP package and compression methods.
 
-type Compression uint16
+type ZipMethod uint16
 
 const (
-	Store Compression = iota
+	Store ZipMethod = iota
 	Shrink
 	Reduce1
 	Reduce2
@@ -48,7 +48,7 @@ func init() { //nolint:gochecknoinits
 	explode.Register()
 }
 
-func (c Compression) String() string {
+func (z ZipMethod) String() string {
 	names := [9]string{
 		Store:   "Store",
 		Shrink:  "Shrink",
@@ -61,10 +61,10 @@ func (c Compression) String() string {
 		Deflate: "Deflate",
 	}
 
-	if int(c) >= len(names) {
-		return fmt.Sprintf("Compression(%d)", c)
+	if int(z) >= len(names) {
+		return fmt.Sprintf("Compression(%d)", z)
 	}
-	return names[c]
+	return names[z]
 }
 
 // Zip returns the content of the src ZIP archive.
@@ -174,7 +174,7 @@ func (x Extractor) zipSkipErrors( //nolint:funlen
 	const format = msg + " %s %w"
 	for n, f := range rc.File {
 		logName := slog.Group(strconv.Itoa(n), slog.String("name", f.Name),
-			slog.String("method", Compression(f.Method).String()))
+			slog.String("method", ZipMethod(f.Method).String()))
 		logErr := func(s string, err error) {
 			logger.Error(msg+" "+s, logName, slog.Any("error", err))
 		}
@@ -405,14 +405,14 @@ func (c *Content) ZipInfo(ctx context.Context, src string) error {
 		return ErrRead
 	}
 
-	c.Files = ZipInfo(out)
+	c.Files = zipInfos(out)
 	c.Ext = zipx
 	return nil
 }
 
-// ZipInfo cleans and splits the raw "zipinfo -1" output into a slice of filenames.
-// It is needed by [Content.ZipInfo] and otherwise can be ignored.
-func ZipInfo(out []byte) []string {
+// zipInfos cleans and splits the raw "zipinfo -1" output into a slice of filenames.
+// It is needed by [Content.zipInfos] and otherwise can be ignored.
+func zipInfos(out []byte) []string {
 	files := strings.Split(string(out), "\n")
 	files = slices.DeleteFunc(files, func(s string) bool {
 		return strings.TrimSpace(s) == ""
@@ -478,6 +478,8 @@ func (x Extractor) ZipUnzip(ctx context.Context, targets ...string) error {
 //   - Implode
 //
 // hwzip does not support targets, the extracting of individual files from a zip archive.
+//
+// Deprecated: [Extractor.Zip] handles Shrink, Reduce, Implode using the [archive/zip] package.
 //
 // [hwzip program]: https://www.hanshq.net/zip2.html
 func (x Extractor) ZipHW(ctx context.Context) error {

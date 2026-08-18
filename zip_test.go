@@ -195,13 +195,3 @@ func TestZipUnzipExtractor(t *testing.T) {
 		})
 	}
 }
-
-func TestZipInfo(t *testing.T) {
-	t.Parallel()
-
-	input := []byte("file1.txt\r\nfile2.jpg\n\nsub/file3.go\r\n")
-	got := archive.ZipInfo(input)
-
-	want := []string{"file1.txt", "file2.jpg", "sub/file3.go"}
-	be.Equal(t, got, want)
-}

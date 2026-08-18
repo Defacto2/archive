@@ -35,7 +35,7 @@ func (c *Content) Gzip(ctx context.Context, src string) error {
 
 	name := gzr.Name
 	if name == "" {
-		name = GzipName(src)
+		name = gzipName(src)
 	}
 
 	c.Files = append(c.Files, name)
@@ -63,7 +63,7 @@ func (c *Content) GzipTar(ctx context.Context, src string) error {
 
 	name := rd.Name
 	if name == "" {
-		name = GzipName(src)
+		name = gzipName(src)
 	}
 
 	const pattern = "archive-cgz-decompress-*"
@@ -114,7 +114,7 @@ func (x Extractor) Gzip(ctx context.Context, targets ...string) error {
 
 	r := bufio.NewReader(src)
 
-	if IsTar(r) {
+	if supportedTar(r) {
 		return x.tarReader(ctx, nil, r, targets...)
 	}
 
@@ -126,7 +126,7 @@ func (x Extractor) singleFile(r io.Reader, name string) error {
 	const format = "extractor gzip file %s %w"
 	s := name
 	if s == "" {
-		s = GzipName(x.Source)
+		s = gzipName(x.Source)
 	}
 
 	path := filepath.Join(x.Destination, filepath.Base(s))
@@ -143,10 +143,10 @@ func (x Extractor) singleFile(r io.Reader, name string) error {
 	return nil
 }
 
-// GzipName returns the uncompressed base filename of the gzip archive.
+// gzipName returns the uncompressed base filename of the gzip archive.
 //
 // For example, if the base filename is `example.txt.gz`, the uncompressed filename is `example.txt`.
-func GzipName(src string) string {
+func gzipName(src string) string {
 	base := filepath.Base(src)
 	if i := strings.LastIndex(base, "."); i > 0 {
 		return base[:i]

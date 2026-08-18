@@ -3,16 +3,19 @@
 // Expand was a decompression method authored in 1989 by Phil Katz
 // and used in his MS-DOS compression tool, PKZip v0.90.
 //
-// It is referred to as ZIP Methods 2, 3, 4, 5, based on the LZ77 algorithm.
+// It is referred to as ZIP Reduce/Expand, methods 2, 3, 4, 5,
+// and is based on the LZ77 algorithm.
 //
 // This package was first prompted using Gemini in August 2026 and
 // manually cleaned to be idiomatic and readable.
 //
 // In 2020, Jason Summers authored a collection of public domain libraries named [oldunzip].
-// [In-depth information] on Reduce was authored by Hans Wennborg in 2021.
+// In-depth [information] on Reduce was authored by Hans Wennborg in 2021,
+// who programmed the public domain [reduce.c].
 //
 // [oldunzip]: https://github.com/jsummers/oldunzip
-// [In-depth information]: https://www.hanshq.net/zip2.html#reduce
+// [information]: https://www.hanshq.net/zip2.html#reduce
+// [reduce.c]: https://www.hanshq.net/files/hwzip/reduce.c
 package expand
 
 import (
@@ -29,9 +32,9 @@ var (
 	// ErrCorruptData is returned when the compressed data stream is malformed.
 	ErrCorruptData = errors.New("expand: corrupt compressed data")
 	// ErrMethod is returned when an invalid compression method is specified.
-	ErrMethod = errors.New("invalid method for expand dcomp")
+	ErrMethod = errors.New("expand: invalid method for expand dcomp")
 	// ErrOverflow is returned when an integer cannot be safely wrapped to a new type.
-	ErrOverflow = errors.New("integer overflow")
+	ErrOverflow = errors.New("expand: integer overflow")
 )
 
 const (

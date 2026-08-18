@@ -16,7 +16,7 @@ const (
 	BSDTar  = "bsdtar"  // BSDTar is the tar decompression command.
 	Cab     = "gcab"    // Cab is the gcab decompression command for Microsoft Cabinet.
 	Gzip    = "gzip"    // Gzip is the gzip decompression command.
-	HWZip   = "hwzip"   // Hwzip the zip decompression command for files using obsolete methods.
+	HWZip   = "hwzip"   // Deprecated: Hwzip the zip decompression command for files using obsolete methods.
 	Lha     = "lha"     // Lha is the lha/lzh decompression command.
 	Lsar    = "lsar"    // Lsar is The Unarchive list command usable on multiple types.
 	Tar     = "tar"     // Tar is the tar decompression command.

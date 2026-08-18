@@ -36,13 +36,9 @@ type Extractor struct {
 // to the destination directory a system archive program.
 // If the targets are empty then all files are extracted.
 //
-// The required Filename string is used to determine the archive format.
-//
-// The following archive formats do not support targets and will always extract the whole archive.
-//   - Gzip // TODO: UPDATE
-//
-// Some archive formats that could be implemented if needed in the future,
-// "freearc", "zoo".
+// Some archive formats do not support targets and will always extract the whole archive:
+//   - Bzip2
+//   - Microsoft CAB
 func (x Extractor) Extract(ctx context.Context, targets ...string) (err error) {
 	const format = "extractor extract %s %w"
 	file, err := os.Open(x.Source)
@@ -89,6 +85,8 @@ func (x Extractor) Run(ctx context.Context, file, prog string, arg ...string) er
 // due to the use of code-points that are not valid in Unicode.
 //
 // If the ZIP file uses a passphrase an error is returned.
+//
+// Deprecated: Use [Extractor.Zip] instead as it supports all ZIP methods.
 func (x Extractor) Zips(ctx context.Context, targets ...string) error {
 	const format = "archive zip extract %s %w"
 	_, err := pkzip.Methods(x.Source)
@@ -117,7 +115,7 @@ func (x Extractor) Zips(ctx context.Context, targets ...string) error {
 //
 // Compressed tarballs signatures are determined by the compression method, not the tarball format.
 // For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
-func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targets ...string) error {
+func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targets ...string) error { //nolint:cyclop
 	filename := filepath.Base(x.Source)
 	switch handles(sign, filename) { //nolint:exhaustive
 	case handleAppleSilicon:
@@ -152,12 +150,10 @@ func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targe
 		return x.BSDTar(ctx, targets...)
 	case handleUnar:
 		return x.Unar(ctx, targets...)
-	case handleZipHW:
-		return x.ZipHW(ctx)
 	case handleZips:
 		return x.Zips(ctx, targets...)
 	case handleZStandard:
-		return x.BSDTar(ctx, targets...)
+		return x.Zip7(ctx, targets...)
 	default:
 	}
 	return handleUnknown(sign)

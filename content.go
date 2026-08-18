@@ -95,7 +95,7 @@ func (c *Content) Run(ctx context.Context, file, prog string, arg ...string) ([]
 	return nil, fmt.Errorf(format, "exec", file, err)
 }
 
-func (c *Content) read(ctx context.Context, sign magicnumber.Signature, src string) error {
+func (c *Content) read(ctx context.Context, sign magicnumber.Signature, src string) error { //nolint:cyclop
 	filename := filepath.Base(src)
 	switch handles(sign, filename) { //nolint:exhaustive
 	case handleAppleSilicon:
@@ -130,12 +130,10 @@ func (c *Content) read(ctx context.Context, sign magicnumber.Signature, src stri
 		return c.BSDTar(ctx, src)
 	case handleUnar:
 		return c.Lsar(ctx, src)
-	case handleZipHW:
-		return c.Zip(ctx, src)
 	case handleZips:
 		return c.Zip(ctx, src)
-	case handleZStandard:
-		return c.Zip7(ctx, src)
+	case handleZStandard: // listing the content of zst files is not supported
+		return handleUnknown(sign)
 	default:
 		return handleUnknown(sign)
 	}

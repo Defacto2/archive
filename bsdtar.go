@@ -35,13 +35,13 @@ func (c *Content) BSDTar(ctx context.Context, src string) error {
 		return ErrRead
 	}
 
-	c.Files = BSDTar(out)
+	c.Files = bsdTars(out)
 	c.Ext = tarx
 	return nil
 }
 
-// BSDTar splits raw tar -tf output into clean, normalized filenames.
-func BSDTar(out []byte) []string {
+// bsdTars splits raw tar -tf output into clean, normalized filenames.
+func bsdTars(out []byte) []string {
 	files := strings.Split(string(out), "\n")
 	files = slices.DeleteFunc(files, func(s string) bool {
 		return strings.TrimSpace(s) == ""

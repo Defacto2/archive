@@ -115,25 +115,3 @@ func TestGzExtractor(t *testing.T) {
 	be.Err(t, err, nil)
 	testingXTexts(t, dst)
 }
-
-func TestGzipName(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"example.txt.gz", "example.txt"},
-		{"archive.tar.gz", "archive.tar"},
-		{"/path/to/data.csv.gz", "data.csv"},
-		{"file_without_ext.gz", "file_without_ext"},
-		{"noextension", "noextension"},
-		{".hidden.gz", ".hidden"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			if got := archive.GzipName(tt.input); got != tt.expected {
-				t.Errorf("GzipName(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
-}

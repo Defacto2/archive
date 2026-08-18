@@ -1,24 +1,28 @@
 // Package archive provides compressed and stored archive file extraction and content listing.
 //
-// The file archive formats supported are 7-Zip, ARC, ARJ, CAB, LHA, LZH, RAR, TAR, compressed TAR, and ZIP.
+// The file archive formats supported are:
+// 7-Zip, ARC, ARJ, BZip2, Microsoft CAB, GZip, LHA, LZH, NoGate PAK, RAR,
+// TAR, tarballs (compressed TAR), XZ, ZIP, and Zstandard.
+// ZIP support includes the deflate, implode, shrink, and store methods.
 //
-// ZIP includes the deflate, implode, shrink, and store methods.
+// The package can use the following terminal programs for legacy file support:
 //
-// The package uses following Linux terminal programs for legacy file support.
-//
-//  1. [7zz] - 7-Zip for Linux: console version
-//  2. [arc] - arc - pc archive utility
-//  2. [arj] - "Open-source ARJ" v3.10 (but not functional on modern macOS for Apple Silicon)
-//  3. [lha] - Lhasa v0.4 LHA tool found in the jlha-utils or lhasa packages
-//  4. [hwzip] - hwzip for BBS era ZIP file that uses obsolete compression methods
-//  5. [tar] - GNU tar
-//  6. [unrar] - 6.24 freeware by Alexander Roshal, not the common [unrar-free] which is feature incomplete
-//  7. [zipinfo] - ZipInfo v3 by the Info-ZIP workgroup
-//  8. [gcab] - Found with in Linux is in the Gnome msitools package
+//   - [7zz] - 7-Zip for Linux: console version
+//   - [arc] - arc - pc archive utility
+//   - [arj] - (deprecated: on macOS) "Open-source ARJ" v3.10
+//   - [bsdtar] - BSD tar that uses the libarchive(3) library
+//   - [gcab] - Authored by Marc-André Lureau and found with in the Gnome msitools package
+//   - [lha] - Lhasa v0.4 LHA tool found in the jlha-utils or lhasa packages
+//   - [unar] - The Unarchiver, both "unar" and "lsar"
+//   - [unrar] - 6.24 freeware by Alexander Roshal, not the common [unrar-free] which is feature incomplete
+//   - [zipinfo] - ZipInfo v3 by the Info-ZIP workgroup
+//   - [hwzip] - (deprecated) hwzip for BBS era ZIP file that uses obsolete compression methods
+//   - [tar] - (deprecated) GNU tar
 //
 // [7zz]: https://www.7-zip.org/
 // [arc]: https://linux.die.net/man/1/arc
 // [arj]: https://arj.sourceforge.net/
+// [bsdtar]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 // [lha]: https://fragglet.github.io/lhasa/
 // [hwzip]: https://www.hanshq.net/zip.html
 // [tar]: https://www.gnu.org/software/tar/
@@ -26,6 +30,7 @@
 // [unrar-free]: https://gitlab.com/bgermann/unrar-free
 // [zipinfo]: https://infozip.sourceforge.net/
 // [gcab]: https://man.archlinux.org/man/gcab.1.en
+// [unar]: https://theunarchiver.com/command-line
 package archive
 
 // More details on Linux decompression programs:
@@ -108,25 +113,18 @@ const (
 	handleTarballXz
 	handleTarballZst
 	handleUnar
-	handleZipHW
 	handleZips
 	handleZStandard
 )
 
 func handles(sign magicnumber.Signature, filename string) handler { //nolint:cyclop
-	// TODO: future logic:
-	// - attempt sign first
-	// - if unknown, attempt with file extension
-	// - finally return an error?
-	// - need special cases with compressed tarballs that rely on filename ext
 	if ok := handleMacOS(sign); ok {
 		return handleAppleSilicon
 	}
-	// handle known tarballs first, otherwise they won't be fully decompressed
+	// handle known tarballs first, otherwise they won't get fully decompressed
 	if tarball := handleTarball(sign, filename); tarball != handleNone {
 		return tarball
 	}
-
 	switch sign { //nolint:exhaustive
 	case magicnumber.X7zCompressArchive:
 		return handle7zip
@@ -134,8 +132,6 @@ func handles(sign magicnumber.Signature, filename string) handler { //nolint:cyc
 		return handleArc
 	case magicnumber.ArchiveRobertJung:
 		return handleArj
-	case magicnumber.XZCompressArchive:
-		return handleBSDTar
 	case magicnumber.Bzip2CompressArchive:
 		return handleBz2
 	case magicnumber.MicrosoftCABinet:
@@ -150,16 +146,16 @@ func handles(sign magicnumber.Signature, filename string) handler { //nolint:cyc
 		return handleRar
 	case magicnumber.TapeARchive:
 		return handleTar
-	case magicnumber.NoGatePAK:
-		return handleUnar
 	case
-		magicnumber.PKWAREZipReduce,
-		magicnumber.PKWAREZipShrink:
-		return handleZipHW // TODO: replace and test with new packages
+		magicnumber.NoGatePAK,
+		magicnumber.XZCompressArchive:
+		return handleUnar
 	case
 		magicnumber.PKWAREZip,
 		magicnumber.PKWAREZip64,
-		magicnumber.PKWAREZipImplode:
+		magicnumber.PKWAREZipImplode,
+		magicnumber.PKWAREZipReduce,
+		magicnumber.PKWAREZipShrink:
 		return handleZips
 	case magicnumber.ZStandardArchive:
 		return handleZStandard
@@ -173,7 +169,7 @@ func handles(sign magicnumber.Signature, filename string) handler { //nolint:cyc
 // and retiring old, 32-bit era unix libraries compiled on x86,
 // that are needed for some terminal tools.
 func handleMacOS(sign magicnumber.Signature) bool {
-	if !AccessViolation() {
+	if !accessViolation() {
 		return false
 	}
 	switch sign { //nolint:exhaustive
@@ -296,41 +292,37 @@ func HardLink(require, src string) (string, error) {
 	return newpath, nil
 }
 
-// AccessViolation returns true when the host runs macOS on Apple Silicon.
+// accessViolation returns true when the host runs macOS on Apple Silicon.
 //
 // runtime GOOS is "darwin" and GOARCH is "arm64".
-func AccessViolation() bool {
+func accessViolation() bool {
 	return runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
 }
 
 // ExtractAll extracts all files from the src archive file to the destination directory.
 func ExtractAll(ctx context.Context, src, dst string) error {
 	const format = "extract all: %w"
-	e := Extractor{Source: src, Destination: dst}
-	if err := e.Extract(ctx); err != nil {
+	x := Extractor{Source: src, Destination: dst}
+	if err := x.Extract(ctx); err != nil {
 		return fmt.Errorf(format, err)
 	}
 	return nil
 }
 
-// ExtractSource extracts the source file to a temporary directory,
-// to function as a pseudo cache.
-// The named file is used as part of the extracted directory path.
-// The src is the source file to extract.
+// ExtractTemp extracts the source file to a temporary directory
+// to act as a pseudo cache.
 //
-// If a target temporary directory already exists,
-// and it contains two or more entries (directories, files, etc).
-// Then ExtractSource will stop, assuming the src file has already
-// been extracted.
+// If a target temporary directory already exists
+// and contains two or more entries (directories, files, etc).
+// Then the extraction will abort as it is assumed the source file
+// has previously been extracted.
 //
-// If the source archive is larger then 157_286_400 bytes,
+// If the source archive is larger than 157,286,400 bytes,
 // then an error is returned.
 //
-// The returned abs string is the absolute path to the temporary directory
-// holding the extracted archive.
-func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funlen
-	abs string, err error,
-) {
+// The returned "dst" string is the absolute path to the extracted
+// temporary directory.
+func ExtractTemp(ctx context.Context, src string) (dst string, err error) { //nolint:cyclop,funlen
 	const format = "extract source archive %s %w"
 
 	const mb150 = 150 * 1024 * 1024
@@ -359,7 +351,7 @@ func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funl
 	}
 
 	local := sanitize.Name(src)
-	dst, err := helper.MkContent(local)
+	path, err := helper.MkContent(local)
 	if err != nil {
 		return "", fmt.Errorf(format, "content directory", err)
 	}
@@ -367,7 +359,7 @@ func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funl
 	// clean temporary extraction directory, but only if there is an error
 	defer func() {
 		if err != nil {
-			if cErr := os.RemoveAll(dst); cErr != nil {
+			if cErr := os.RemoveAll(path); cErr != nil {
 				err = errors.Join(err, fmt.Errorf(format, "cleanup", cErr))
 			}
 		}
@@ -375,12 +367,17 @@ func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funl
 
 	if sign == magicnumber.Unknown {
 		// handle non-archive files
-		newpath := filepath.Join(dst, name)
+		base := filepath.Base(src)
+		pattern := sanitize.Name(base) + "-*"
+		f, err := os.CreateTemp(path, pattern)
+		if err != nil {
+			return "", fmt.Errorf(format, "create temp file", err)
+		}
+		newpath := filepath.Join(path, f.Name())
 		if _, cErr := helper.DuplicateOW(src, newpath); cErr != nil {
 			return "", fmt.Errorf(format, "duplicate file", cErr)
 		}
-		return dst, nil
-		// return "", fmt.Errorf(format, "unknown", ErrNotArchive)
+		return path, nil
 	}
 
 	entries := 0
@@ -398,23 +395,44 @@ func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funl
 		}
 		return nil
 	}
-	_ = filepath.WalkDir(dst, counter)
+	_ = filepath.WalkDir(path, counter)
 
 	const extracted = 2
 	if entries >= extracted {
-		return dst, nil
+		return path, nil
 	}
 
-	x := Extractor{Source: src, Destination: dst}
+	x := Extractor{Source: src, Destination: path}
 	if err := x.Extract(ctx); err != nil {
 		return "", fmt.Errorf(format, "exec", err)
 	}
-	return dst, nil
+	return path, nil
 }
 
-// List returns the files within a 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
-// The filename extension is used to determine the archive format.
-func List(ctx context.Context, src, filename string) ([]string, error) {
+// ExtractSource extracts the source file to a temporary directory,
+// to function as a pseudo cache.
+// The named file is used as part of the extracted directory path.
+// The src is the source file to extract.
+//
+// If a target temporary directory already exists,
+// and it contains two or more entries (directories, files, etc).
+// Then ExtractSource will stop, assuming the src file has already
+// been extracted.
+//
+// If the source archive is larger then 157_286_400 bytes,
+// then an error is returned.
+//
+// The returned abs string is the absolute path to the temporary directory
+// holding the extracted archive.
+//
+// Deprecated: Use [ExtractTemp] as the name argument is unused.
+func ExtractSource(ctx context.Context, src, _ string) (
+	abs string, err error,
+) {
+	return ExtractTemp(ctx, src)
+}
+
+func Lists(ctx context.Context, src string) ([]string, error) {
 	const format = "archive list %s %w"
 	base := filepath.Base(src)
 	inf, err := os.Stat(src)
@@ -428,9 +446,9 @@ func List(ctx context.Context, src, filename string) ([]string, error) {
 		return nil, fmt.Errorf(format, base, ErrFile)
 	}
 
-	path, err := ExtractSource(ctx, src, filename)
+	path, err := ExtractTemp(ctx, src)
 	if err != nil {
-		return commander(ctx, src, filename)
+		return readContent(ctx, src)
 	}
 	defer os.RemoveAll(path)
 
@@ -451,6 +469,17 @@ func List(ctx context.Context, src, filename string) ([]string, error) {
 	return files, nil
 }
 
+// List returns the files within the src archive.
+//
+// The optional filename gets used as a extraction pattern name.
+// For example, where the src archive is named as a UUID
+// and the original name is something else such as a tarball.
+//
+// Deprecated: Use [Lists] as the filename argument is unused.
+func List(ctx context.Context, src, _ string) ([]string, error) {
+	return Lists(ctx, src)
+}
+
 func relPath(path, targPath string) string {
 	rel, err := filepath.Rel(path, targPath)
 	if err != nil {
@@ -459,15 +488,15 @@ func relPath(path, targPath string) string {
 	return rel
 }
 
-// commander uses system archiver and decompression programs to read the src archive file.
-func commander(ctx context.Context, src, filename string) ([]string, error) {
+// readContent uses system archiver and decompression programs to read the src archive file.
+func readContent(ctx context.Context, src string) ([]string, error) {
 	cont := Content{
 		Ext:   "",
 		Files: []string{},
 	}
-	const format = "commander failed with %s (ext: %s): %w"
+	const format = "commander failed with %s: %w"
 	if err := cont.Read(ctx, src); err != nil {
-		return nil, fmt.Errorf(format, filename, cont.Ext, err)
+		return nil, fmt.Errorf(format, filepath.Base(src), err)
 	}
 
 	// remove empty entries in-place

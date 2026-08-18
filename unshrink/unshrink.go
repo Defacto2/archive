@@ -3,16 +3,19 @@
 // Unshrink was a decompression method authored in 1989 by Phil Katz
 // and used in his MS-DOS compression tool, PKZip v0.80 and v0.90.
 //
-// It is retroactively referred to as ZIP Method 1 and is based on the LZW algorithm.
+// It is retroactively referred to as ZIP Shrink/Unshrink method 1
+// and is based on the LZW algorithm.
 //
 // This package was first prompted using Gemini in August 2026 and
 // manually cleaned to be idiomatic and readable.
 //
 // In 2020, Jason Summers authored a collection of public domain libraries named [oldunzip].
-// [In-depth information] on Shrink was authored by Hans Wennborg in 2021.
+// In-depth [information] on Shrink was authored by Hans Wennborg in 2021,
+// who programmed the public domain [shrink.c].
 //
 // [oldunzip]: https://github.com/jsummers/oldunzip
-// [In-depth information]: https://www.hanshq.net/zip2.html#shrink
+// [information]: https://www.hanshq.net/zip2.html#shrink
+// [shrink.c]: https://www.hanshq.net/files/hwzip/shrink.c
 package unshrink
 
 import (

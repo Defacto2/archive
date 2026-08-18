@@ -10,7 +10,7 @@ import (
 	"github.com/Defacto2/archive/command"
 )
 
-// Package file zip7.go contains the 7-Zip compression methods.
+// Package file lzma.go contains the 7-Zip compression methods.
 
 // Zip7 returns the content of the src 7-zip archive.
 // The format credited to Igor Pavlov and using the [7z program].
@@ -42,13 +42,13 @@ func (c *Content) Zip7(ctx context.Context, src string) error {
 		return ErrRead
 	}
 
-	c.Files = Zip7s(out)
+	c.Files = zip7s(out)
 	c.Ext = zip7x
 	return nil
 }
 
-// Zip7s parses the output of the 7z list command and returns the listed filenames.
-func Zip7s(out []byte) []string {
+// zip7s parses the output of the 7z list command and returns the listed filenames.
+func zip7s(out []byte) []string {
 	var files []string
 	listTable := false
 	listIndex := -1
