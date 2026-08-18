@@ -15,7 +15,7 @@ const (
 
 func TestLsar(t *testing.T) {
 	t.Parallel()
-	noSupport := []string{"Zstandard"}
+	noSupport := []string{"Zstandard Tar", "Zstandard"}
 	for _, tt := range Tests(t) { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
@@ -38,7 +38,7 @@ func TestLsar(t *testing.T) {
 
 func TestUnar(t *testing.T) {
 	t.Parallel()
-	noSupport := []string{"Reduce ZIP", "Shrink ZIP", "Zstandard"}
+	noSupport := []string{"Reduce ZIP", "Shrink ZIP", "Zstandard Tar", "Zstandard"}
 	for _, tt := range Tests(t) { //nolint:varnamelen
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
