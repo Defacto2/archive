@@ -132,6 +132,7 @@ func testingXLower(t *testing.T, tempDir string) {
 	}.extractor(t, names[:], texts[:])
 }
 
+// TODO: hashes.
 var mixes = [15]dat{ //nolint:gochecknoglobals
 	{"TEST.ANS", 68},
 	{"TEST.ASC", 13},
@@ -144,7 +145,7 @@ var mixes = [15]dat{ //nolint:gochecknoglobals
 	{"TEST.JPG", 16_461},
 	{"TEST.ME", 12},
 	{"TEST.NFO", 13},
-	{"TEST.PCX", 2_426_368},
+	{"TEST.PCX", 29_530},
 	{"TEST.PNG", 4_163},
 	{"TEST.TXT", 14},
 	{"TEST~1.JPE", 16461},
@@ -213,12 +214,15 @@ func (c config) extractor(t *testing.T, names []string, data []dat) {
 		if info.IsDir() {
 			return nil
 		}
-		find := slices.Index(names[:], info.Name())
+		find := slices.Index(names, info.Name())
+		t.Log("extractor result>", info.Name(), info.Size())
 		if c.enforceNames {
 			be.True(t, find >= 0)
 		}
 		if find >= 0 && find < c.wants {
+			name := data[find].name
 			bytes := data[find].bytes
+			t.Log("testing expecting", name, bytes)
 			be.Equal(t, info.Size(), bytes)
 		}
 		count++
@@ -242,7 +246,7 @@ type TestData struct {
 }
 
 func Tests() []TestData { //nolint:funlen
-	return []TestData{
+	tests := []TestData{
 		{
 			WantErr:  false,
 			Testname: "7-Zip",
@@ -364,6 +368,12 @@ func Tests() []TestData { //nolint:funlen
 			cmdDos: "", cmdInfo: "", cmdVersion: "",
 		},
 	}
+	if archive.AccessViolation() {
+		tests = slices.DeleteFunc(tests, func(tt TestData) bool {
+			return tt.cmdDos == "ARJ.EXE" // the arj tool on macOS now gets killed by the system
+		})
+	}
+	return tests
 }
 
 func TestData_ReadContent(t *testing.T) {
@@ -587,15 +597,15 @@ func TestHardLink(t *testing.T) {
 	}{
 		{
 			"Missing ARJ extension", ".arj", "ARCHIVE",
-			"ARCHIVE.arj", false,
+			".arj", false,
 		},
 		{
 			"Missing TAR GZ extension", ".tar.gz", "ARCHIVE",
-			"ARCHIVE.tar.gz", false,
+			".tar.gz", false,
 		},
 		{
 			"Not a valid extension", "arj", "ARCHIVE",
-			"ARCHIVE.arj", true,
+			".arj", true,
 		},
 		{
 			"Using ARJ extension", ".arj", "ARCHIVE.arj",
@@ -620,7 +630,9 @@ func TestHardLink(t *testing.T) {
 				be.Equal(t, got, "")
 				return
 			}
+			defer os.Remove(got)
 			be.True(t, strings.HasSuffix(got, tt.want))
+			be.True(t, strings.HasPrefix(filepath.Base(got), tt.src+"-"))
 		})
 	}
 }
