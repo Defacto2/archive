@@ -17,9 +17,6 @@ import (
 	"github.com/Defacto2/archive/sanitize"
 )
 
-// TODO: create more tar tests
-// bsdtar -c --format "ustar" "pax" etc
-
 // Package file tar.go contains the Tape ARchives methods.
 
 // Tar returns the content of a TAR archive.
