@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Defacto2/archive/sanitize"
 )
 
 // TODO: create more tar tests
@@ -129,7 +131,7 @@ func (x Extractor) tarReader(ctx context.Context, logger *slog.Logger, r io.Read
 			continue
 		}
 
-		local := Localize(hdr.Name)
+		local := sanitize.Name(hdr.Name)
 		if local != hdr.Name {
 			logger.Info(msg+" renamed entry",
 				slog.String("stored name", hdr.Name), slog.String("extracted name", local))

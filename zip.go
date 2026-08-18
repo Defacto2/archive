@@ -21,6 +21,7 @@ import (
 	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/archive/expand"
 	"github.com/Defacto2/archive/explode"
+	"github.com/Defacto2/archive/sanitize"
 	"github.com/Defacto2/archive/unshrink"
 )
 
@@ -191,7 +192,7 @@ func (x Extractor) zipSkipErrors( //nolint:funlen
 			continue
 		}
 
-		local := Localize(f.Name)
+		local := sanitize.Name(f.Name)
 		if local != f.Name {
 			logger.Info(msg+" renamed", logName, slog.String("extracted name", local))
 		}
@@ -256,7 +257,7 @@ func (x Extractor) zipStrict(ctx context.Context, rc *zip.ReadCloser, targets ..
 			continue
 		}
 
-		local := Localize(f.Name)
+		local := sanitize.Name(f.Name)
 		path := filepath.Join(x.Destination, local)
 		if f.FileInfo().IsDir() {
 			// create directories directly without opening file handles

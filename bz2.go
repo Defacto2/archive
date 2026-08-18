@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Defacto2/archive/sanitize"
 )
 
 // Package file bz2.go contains the BZ2 compression methods.
@@ -33,7 +35,7 @@ func (c *Content) Bz2(ctx context.Context, src string) error {
 	}
 
 	name := filepath.Base(path)
-	base := Localize(name)
+	base := sanitize.Name(name)
 	c.Files = append(c.Files, base)
 	c.Ext = bz2x
 	return nil
