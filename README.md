@@ -18,47 +18,37 @@ Use the functions.
 import "github.com/Defacto2/archive"
 
 func main() {
+    src := filepath.Join("path", "to", "archive.zip")
+    dst := filepath.Join(os.TempDir(), "extracted")
+
     // Extract all files from an archive.
-    if err := archive.Extract("path/to/archive.zip", "path/to/extract"); err != nil {
-        fmt.Println(err)
-    }
+    _ = archive.ExtractAll(context.Background(), src, dst)
 
-    // Extract a specific files from an archive.
+    // Extract specific files from an archive.
     x := archive.Extractor{
-        Source: "path/to/archive.zip",
-        Destination: "path/to/extract",
+        Source:       src,
+        Destination:  dst,
     }
-    if err := x.Extract("file1.txt", "file2.txt"); err != nil {
-        fmt.Println(err)
-    }
-
-    // Extract all files to a temporary directory.
-    path, err := archive.ExtractSource("path/to/archive.zip", "tempsubdir")
-    if err != nil {
-        fmt.Println(err)
-    }
-    fmt.Println("Extracted to:", path)
+    _ = x.Extract(context.Background(), "file1.txt", "file2.txt")
 
     // List the contents of an archive.
-    files, err := archive.List("path/to/archive.zip", "archive.zip")
-    if err != nil {
-        fmt.Println(err)
-    }
-    for _, f := range files {
-        fmt.Println(f)
+    files, _ := archive.List(src, "")
+    for n, name := range files {
+        fmt.Println(n, name)
     }
 
     // Search for a possible readme file within the list of files.
-    name := archive.Readme("archive.zip", cont.Files)
-    fmt.Println(name)
+    readme := archive.Readme("archive.zip", files...)
+    fmt.Println(readme)
 
     // Compress a file into a new archive.
-    if _, err := rezip.Compress("file1.txt", "path/to/new.zip"); err != nil {
-        fmt.Println(err)
-    }
+    srcFile := filepath.Join("path", "to", "textfile.txt")
+    dst = filepath.Join(os.TempDir(), "testfile.zip")
+    _, _ = rezip.Compress(srcFile, dst)
+
     // Compress a directory into a new archive.
-    if _, err = rezip.CompressDir("path/to/directory", "path/to/new.zip"); err != nil {
-        fmt.Println(err)
-    }
+    srcDir := filepath.Join("path", "to", "compress")
+    dst = filepath.Join(os.TempDir(), "testdata.zip")
+    _, _ = rezip.CompressDir(srcDir, dst)
 }
 ```
