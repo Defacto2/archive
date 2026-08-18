@@ -13,7 +13,7 @@ import (
 )
 
 // Package file arj.go contains the ARJ compression methods.
-
+//
 // ARJ returns the content of the src ARJ archive.
 // The format credited to Robert Jung using the [arj program].
 //
