@@ -23,7 +23,7 @@ const (
 	createUnique = os.O_RDWR | os.O_CREATE | os.O_EXCL
 )
 
-var ErrTest = errors.New("rezip test failed")
+var ErrTest = errors.New("rezip: test failed")
 
 // Compress compresses the named file into the dest zip file using the
 // Deflate method. The total number of bytes written to the zip file is returned.

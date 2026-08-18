@@ -22,23 +22,24 @@ func main() {
     dst := filepath.Join(os.TempDir(), "extracted")
 
     // Extract all files from an archive.
-    _ = archive.ExtractAll(context.Background(), src, dst)
+    _ = archive.ExtractAll(context.TODO(), src, dst)
 
-    // Extract specific files from an archive.
+    // Extract targets or specific files from an archive.
     x := archive.Extractor{
         Source:       src,
         Destination:  dst,
     }
-    _ = x.Extract(context.Background(), "file1.txt", "file2.txt")
+    _ = x.Extract(context.TODO(), "file1.txt", "file2.txt")
 
     // List the contents of an archive.
-    files, _ := archive.List(src, "")
-    for n, name := range files {
+    names, _ := archive.Lists(src)
+    for n, name := range names {
         fmt.Println(n, name)
     }
 
     // Search for a possible readme file within the list of files.
-    readme := archive.Readme("archive.zip", files...)
+    filename := filepath.Base(src)
+    readme := archive.Readme(filename, files...)
     fmt.Println(readme)
 
     // Compress a file into a new archive.
