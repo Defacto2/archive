@@ -8,7 +8,7 @@
 //
 //  1. [7zz] - 7-Zip for Linux: console version
 //  2. [arc] - arc - pc archive utility
-//  2. [arj] - "Open-source ARJ" v3.10
+//  2. [arj] - "Open-source ARJ" v3.10 (but not functional on modern macOS for Apple Silicon)
 //  3. [lha] - Lhasa v0.4 LHA tool found in the jlha-utils or lhasa packages
 //  4. [hwzip] - hwzip for BBS era ZIP file that uses obsolete compression methods
 //  5. [tar] - GNU tar
@@ -42,6 +42,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Defacto2/archive/sanitize"
 	"github.com/Defacto2/helper"
 	"github.com/Defacto2/magicnumber"
 )
@@ -74,6 +75,7 @@ const (
 )
 
 var (
+	ErrCorruption     = errors.New("corrupt or unexpected decompression")
 	ErrDest           = errors.New("destination is empty")
 	ErrHLExt          = errors.New("not a valid extension, it must be in the format, .ext")
 	ErrNotArchive     = errors.New("file is not an archive")
@@ -111,12 +113,12 @@ const (
 	handleZStandard
 )
 
-// future logic
-// - attempt sign first
-// - if unknown, attempt with file extension
-// - finally return an error?
-// - need special cases with compressed tarballs that rely on filename ext
 func handles(sign magicnumber.Signature, filename string) handler { //nolint:cyclop
+	// TODO: future logic:
+	// - attempt sign first
+	// - if unknown, attempt with file extension
+	// - finally return an error?
+	// - need special cases with compressed tarballs that rely on filename ext
 	if ok := handleMacOS(sign); ok {
 		return handleAppleSilicon
 	}
@@ -153,7 +155,7 @@ func handles(sign magicnumber.Signature, filename string) handler { //nolint:cyc
 	case
 		magicnumber.PKWAREZipReduce,
 		magicnumber.PKWAREZipShrink:
-		return handleZipHW
+		return handleZipHW // TODO: replace and test with new packages
 	case
 		magicnumber.PKWAREZip,
 		magicnumber.PKWAREZip64,
@@ -185,7 +187,7 @@ func handleMacOS(sign magicnumber.Signature) bool {
 	}
 }
 
-func handleTarball(sign magicnumber.Signature, filename string) handler {
+func handleTarball(sign magicnumber.Signature, filename string) handler { //nolint:cyclop
 	const (
 		bz2  = ".tar.bz2"
 		bz   = ".tar.bz"
@@ -263,24 +265,40 @@ func HardLink(require, src string) (string, error) {
 		return "", nil
 	}
 
-	name := src + require
+	oldpath, err := filepath.Abs(src)
+	if err != nil {
+		return "", fmt.Errorf(format+"filepath abs: %w", err)
+	}
 
-	if _, err := os.Lstat(name); err == nil {
-		return name, nil
+	dir := filepath.Dir(oldpath)
+	base := filepath.Base(oldpath)
+	pattern := fmt.Sprintf("%s-*%s", base, require)
+
+	tmp, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", fmt.Errorf(format+"create temp: %w", err)
 	}
-	if _, err := os.Stat(name); errors.Is(err, fs.ErrNotExist) {
-		newname, err := filepath.Abs(name)
-		if err != nil {
-			return "", fmt.Errorf(format+"filepath abs: %w", err)
-		}
-		if err := os.Link(src, newname); err != nil {
-			return "", fmt.Errorf(format+"os link: %w", err)
-		}
-		return newname, nil
+	newpath := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(newpath)
+		return "", fmt.Errorf(format+"close temp: %w", err)
 	}
-	return "", nil
+	if err := os.Remove(newpath); err != nil {
+		return "", fmt.Errorf(format+"remove placeholder: %w", err)
+	}
+
+	if err := os.Link(oldpath, newpath); err != nil {
+		if _, cpErr := helper.Duplicate(oldpath, newpath); cpErr != nil {
+			return "", fmt.Errorf(format+"os link (%w) and duplicate: %w", err, cpErr)
+		}
+	}
+
+	return newpath, nil
 }
 
+// AccessViolation returns true when the host runs macOS on Apple Silicon.
+//
+// runtime GOOS is "darwin" and GOARCH is "arm64".
 func AccessViolation() bool {
 	return runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
 }
@@ -325,9 +343,22 @@ func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funl
 		return "", ErrTooMany
 	}
 
-	// TODO: check magic here!
+	file, err := os.Open(src)
+	if err != nil {
+		return "", fmt.Errorf(format, "open", err)
+	}
+	defer func() {
+		if cErr := file.Close(); cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format, "cannot close", cErr))
+		}
+	}()
 
-	local := Localize(src)
+	sign, err := magicnumber.Archive(file)
+	if err != nil {
+		return "", fmt.Errorf(format, "magic", err)
+	}
+
+	local := sanitize.Name(src)
 	dst, err := helper.MkContent(local)
 	if err != nil {
 		return "", fmt.Errorf(format, "content directory", err)
@@ -341,6 +372,16 @@ func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funl
 			}
 		}
 	}()
+
+	if sign == magicnumber.Unknown {
+		// handle non-archive files
+		newpath := filepath.Join(dst, name)
+		if _, cErr := helper.DuplicateOW(src, newpath); cErr != nil {
+			return "", fmt.Errorf(format, "duplicate file", cErr)
+		}
+		return dst, nil
+		// return "", fmt.Errorf(format, "unknown", ErrNotArchive)
+	}
 
 	entries := 0
 	// counter is used instead of os.ReadDir to handle edge-case
@@ -364,49 +405,11 @@ func ExtractSource(ctx context.Context, src, name string) ( //nolint:cyclop,funl
 		return dst, nil
 	}
 
-	ok, cErr := filearchive(src)
-	if cErr != nil {
-		return "", fmt.Errorf(format, "file archive", cErr)
+	x := Extractor{Source: src, Destination: dst}
+	if err := x.Extract(ctx); err != nil {
+		return "", fmt.Errorf(format, "exec", err)
 	}
-	if !ok {
-		// handle non-archive file
-		newpath := filepath.Join(dst, name)
-		if _, cErr := helper.DuplicateOW(src, newpath); cErr != nil {
-			return "", fmt.Errorf(format, "duplicate file", cErr)
-		}
-		return dst, nil
-	}
-
-	// TODO: replace this
-	// 	return x.lookup(ctx, sign, targets...)
-	e := Extractor{Source: src, Destination: dst}
-	if err := e.Extract(ctx); err != nil {
-		return "", fmt.Errorf(format, "???", err)
-	}
-	// TODO: move !ok here by checked the err of extract
-	// return nil
-
 	return dst, nil
-}
-
-// filearchive confirms whether the src file is a supported archive file.
-func filearchive(src string) (ok bool, err error) {
-	file, err := os.Open(src)
-	if err != nil {
-		return false, fmt.Errorf("open file: %w", err)
-	}
-	defer func() {
-		if cErr := file.Close(); cErr != nil {
-			err = errors.Join(err, fmt.Errorf("close file: %w", cErr))
-		}
-	}()
-
-	sign, err := magicnumber.Archive(file)
-	if err != nil {
-		return false, fmt.Errorf("read archive signature: %w", err)
-	}
-
-	return sign != magicnumber.Unknown, nil
 }
 
 // List returns the files within a 7zip, arc, arj, lha/lhz, gzip, rar, tar, zip archive.
@@ -483,27 +486,4 @@ func skipName(name string, targets ...string) bool {
 		return true
 	}
 	return false
-}
-
-func Localize(name string) string {
-	local, err := filepath.Localize(name)
-	if err == nil {
-		return local
-	}
-	return SanitizeFilename(name)
-}
-
-// TODO: windows friendly version
-func SanitizeFilename(name string) string {
-	// POSIX/Unix filesystems only prohibit '/' and NUL byte (\x00)
-	r := strings.NewReplacer(
-		"/", "_",
-		"\x00", "",
-	)
-	clean := strings.TrimSpace(r.Replace(name))
-	if clean == "" {
-		return "unnamed_file"
-	}
-
-	return clean
 }
