@@ -1,3 +1,4 @@
+//nolint:tagliatelle
 package archive
 
 import (
@@ -20,6 +21,7 @@ import (
 //   - unar command line tool: https://theunarchiver.com/command-line
 func (c *Content) Lsar(ctx context.Context, src string) error {
 	const format = "content lsar %s %w"
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 
@@ -32,6 +34,7 @@ func (c *Content) Lsar(ctx context.Context, src string) error {
 	if err != nil {
 		return fmt.Errorf(format, "parse json", err)
 	}
+
 	return nil
 }
 
@@ -39,7 +42,7 @@ func (c *Content) Lsar(ctx context.Context, src string) error {
 type lsarJSON struct {
 	Format   string `json:"lsarFormatName"`
 	Contents []struct {
-		FileName string `json:"XADFileName"` //nolint:tagliatelle
+		FileName string `json:"XADFileName"`
 	} `json:"lsarContents"`
 }
 
@@ -49,15 +52,19 @@ type lsarJSON struct {
 // and a string slice with the filenames for [Content.Files].
 func lsars(data []byte) ([]string, error) {
 	var out lsarJSON
-	if err := json.Unmarshal(data, &out); err != nil {
+
+	err := json.Unmarshal(data, &out)
+	if err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
+
 	names := make([]string, 0, len(out.Contents))
 	for _, entry := range out.Contents {
 		if entry.FileName != "" {
 			names = append(names, entry.FileName)
 		}
 	}
+
 	return names, nil
 }
 
@@ -79,7 +86,6 @@ func (x Extractor) Unar(ctx context.Context, targets ...string) error {
 		return fmt.Errorf(fmtext, err)
 	}
 
-	src, dst := x.Source, x.Destination
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
 
@@ -88,9 +94,11 @@ func (x Extractor) Unar(ctx context.Context, targets ...string) error {
 		noDirectory     = "-no-directory"
 		outputDirectory = "-output-directory"
 	)
+
 	const size = 5
 	// example command: unar -quiet -no-directory -copy-time -force-overwrite -output-directory <destdir> archive [items]
 	arg := make([]string, 0, size+len(targets))
+	src, dst := x.Source, x.Destination
 	arg = append(arg, forceOverwrite, noDirectory, outputDirectory, dst, src)
 	if len(targets) > 0 {
 		arg = append(arg, targets...)
@@ -119,5 +127,6 @@ func (x Extractor) Unar(ctx context.Context, targets ...string) error {
 	if len(cmdout) == 0 {
 		return fmt.Errorf(format, ErrRead, prog, cmderr, cmdout)
 	}
+
 	return nil
 }

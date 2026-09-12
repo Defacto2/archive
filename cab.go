@@ -18,10 +18,10 @@ import (
 //
 // [gcab program]: https://man.archlinux.org/man/gcab.1.en
 func (c *Content) Cab(ctx context.Context, src string) error {
-	const format = "content cab reader %s %w"
 	const file = command.Cab
 	prog, err := exec.LookPath(file)
 	if err != nil {
+		const format = "content cab reader %s %w"
 		return fmt.Errorf(format, "look path", err)
 	}
 

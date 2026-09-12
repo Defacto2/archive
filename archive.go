@@ -31,6 +31,8 @@
 // [zipinfo]: https://infozip.sourceforge.net/
 // [gcab]: https://man.archlinux.org/man/gcab.1.en
 // [unar]: https://theunarchiver.com/command-line
+//
+//nolint:cyclop,nonamedreturns
 package archive
 
 // More details on Linux decompression programs:
@@ -275,16 +277,20 @@ func HardLink(require, src string) (string, error) {
 		return "", fmt.Errorf(format+"create temp: %w", err)
 	}
 	newpath := tmp.Name()
-	if err := tmp.Close(); err != nil {
+	err = tmp.Close()
+	if err != nil {
 		_ = os.Remove(newpath)
 		return "", fmt.Errorf(format+"close temp: %w", err)
 	}
-	if err := os.Remove(newpath); err != nil {
+	err = os.Remove(newpath)
+	if err != nil {
 		return "", fmt.Errorf(format+"remove placeholder: %w", err)
 	}
 
-	if err := os.Link(oldpath, newpath); err != nil {
-		if _, cpErr := helper.Duplicate(oldpath, newpath); cpErr != nil {
+	err = os.Link(oldpath, newpath)
+	if err != nil {
+		_, cpErr := helper.Duplicate(oldpath, newpath)
+		if cpErr != nil {
 			return "", fmt.Errorf(format+"os link (%w) and duplicate: %w", err, cpErr)
 		}
 	}
@@ -301,11 +307,15 @@ func accessViolation() bool {
 
 // ExtractAll extracts all files from the src archive file to the destination directory.
 func ExtractAll(ctx context.Context, src, dst string) error {
-	const format = "extract all: %w"
-	x := Extractor{Source: src, Destination: dst}
-	if err := x.Extract(ctx); err != nil {
+	all := Extractor{
+		Source: src, Destination: dst,
+	}
+	err := all.Extract(ctx)
+	if err != nil {
+		const format = "extract all: %w"
 		return fmt.Errorf(format, err)
 	}
+
 	return nil
 }
 
@@ -320,63 +330,69 @@ func ExtractAll(ctx context.Context, src, dst string) error {
 // If the source archive is larger than 157,286,400 bytes,
 // then an error is returned.
 //
-// The returned "dst" string is the absolute path to the extracted
+// The returned string is the absolute path to the extracted
 // temporary directory.
-func ExtractTemp(ctx context.Context, src string) (dst string, err error) { //nolint:cyclop,funlen
+func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //nolint:funlen
 	const format = "extract source archive %s %w"
 
-	const mb150 = 150 * 1024 * 1024
+	const size150MB = 150 * 1024 * 1024
 
-	if inf, err := os.Stat(src); err != nil {
-		return "", fmt.Errorf(format, "stat source", err)
-	} else if inf.IsDir() {
+	inf, aErr := os.Stat(src)
+	switch {
+	case aErr != nil:
+		return "", fmt.Errorf(format, "stat source", aErr)
+	case inf.IsDir():
 		return "", ErrNotArchive
-	} else if inf.Size() > mb150 {
+	case inf.Size() > size150MB:
 		return "", ErrTooMany
 	}
 
-	file, err := os.Open(src)
-	if err != nil {
-		return "", fmt.Errorf(format, "open", err)
+	file, aErr := os.Open(src)
+	if aErr != nil {
+		return "", fmt.Errorf(format, "open", aErr)
 	}
 	defer func() {
-		if cErr := file.Close(); cErr != nil {
-			err = errors.Join(err, fmt.Errorf(format, "cannot close", cErr))
+		cErr := file.Close()
+		if cErr != nil {
+			aErr = errors.Join(aErr, fmt.Errorf(format, "cannot close", cErr))
 		}
 	}()
 
-	sign, err := magicnumber.Archive(file)
-	if err != nil {
-		return "", fmt.Errorf(format, "magic", err)
+	sign, aErr := magicnumber.Archive(file)
+	if aErr != nil {
+		return "", fmt.Errorf(format, "magic", aErr)
 	}
 
 	local := sanitize.Name(src)
-	path, err := helper.MkContent(local)
-	if err != nil {
-		return "", fmt.Errorf(format, "content directory", err)
+	path, mErr := helper.MkContent(local)
+	if mErr != nil {
+		return "", fmt.Errorf(format, "content directory", mErr)
 	}
 
 	// clean temporary extraction directory, but only if there is an error
 	defer func() {
-		if err != nil {
-			if cErr := os.RemoveAll(path); cErr != nil {
-				err = errors.Join(err, fmt.Errorf(format, "cleanup", cErr))
+		if aErr != nil {
+			cErr := os.RemoveAll(path)
+			if cErr != nil {
+				aErr = errors.Join(aErr, fmt.Errorf(format, "cleanup", cErr))
 			}
 		}
 	}()
 
 	if sign == magicnumber.Unknown {
 		// handle non-archive files
-		base := filepath.Base(src)
-		pattern := sanitize.Name(base) + "-*"
+		pattern := sanitize.Name(filepath.Base(src)) + "-*"
 		f, err := os.CreateTemp(path, pattern)
 		if err != nil {
 			return "", fmt.Errorf(format, "create temp file", err)
 		}
+
 		newpath := filepath.Join(path, f.Name())
-		if _, cErr := helper.DuplicateOW(src, newpath); cErr != nil {
+		_, cErr := helper.DuplicateOW(src, newpath)
+		if cErr != nil {
 			return "", fmt.Errorf(format, "duplicate file", cErr)
 		}
+
 		return path, nil
 	}
 
@@ -395,6 +411,7 @@ func ExtractTemp(ctx context.Context, src string) (dst string, err error) { //no
 		}
 		return nil
 	}
+
 	_ = filepath.WalkDir(path, counter)
 
 	const extracted = 2
@@ -402,9 +419,10 @@ func ExtractTemp(ctx context.Context, src string) (dst string, err error) { //no
 		return path, nil
 	}
 
-	x := Extractor{Source: src, Destination: path}
-	if err := x.Extract(ctx); err != nil {
-		return "", fmt.Errorf(format, "exec", err)
+	all := Extractor{Source: src, Destination: path}
+	xErr := all.Extract(ctx)
+	if xErr != nil {
+		return "", fmt.Errorf(format, "exec", xErr)
 	}
 	return path, nil
 }
@@ -422,27 +440,25 @@ func ExtractTemp(ctx context.Context, src string) (dst string, err error) { //no
 // If the source archive is larger then 157_286_400 bytes,
 // then an error is returned.
 //
-// The returned abs string is the absolute path to the temporary directory
+// The returned string is the absolute path to the temporary directory
 // holding the extracted archive.
 //
 // Deprecated: Use [ExtractTemp] as the name argument is unused.
-func ExtractSource(ctx context.Context, src, _ string) (
-	abs string, err error,
-) {
+func ExtractSource(ctx context.Context, src, _ string) (string, error) {
 	return ExtractTemp(ctx, src)
 }
 
 func Lists(ctx context.Context, src string) ([]string, error) {
 	const format = "archive list %s %w"
+
 	base := filepath.Base(src)
 	inf, err := os.Stat(src)
-	if errors.Is(err, fs.ErrNotExist) {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
 		return nil, fmt.Errorf(format, base, fs.ErrNotExist)
-	}
-	if inf == nil {
+	case inf == nil:
 		return nil, nil
-	}
-	if inf.IsDir() {
+	case inf.IsDir():
 		return nil, fmt.Errorf(format, base, ErrFile)
 	}
 
@@ -495,7 +511,8 @@ func readContent(ctx context.Context, src string) ([]string, error) {
 		Files: []string{},
 	}
 	const format = "commander failed with %s: %w"
-	if err := cont.Read(ctx, src); err != nil {
+	err := cont.Read(ctx, src)
+	if err != nil {
 		return nil, fmt.Errorf(format, filepath.Base(src), err)
 	}
 
@@ -511,6 +528,7 @@ func skipName(name string, targets ...string) bool {
 	if len(targets) == 0 {
 		return false
 	}
+
 	if !slices.Contains(targets, name) {
 		return true
 	}

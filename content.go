@@ -54,14 +54,17 @@ func (c *Content) Read(ctx context.Context, src string) error {
 		return fmt.Errorf(format, "open", err)
 	}
 	defer func() {
-		if cErr := file.Close(); cErr != nil {
+		cErr := file.Close()
+		if cErr != nil {
 			err = errors.Join(err, fmt.Errorf(format, "cannot close", cErr))
 		}
 	}()
+
 	sign, err := magicnumber.Archive(file)
 	if err != nil {
 		return fmt.Errorf(format, "magic", err)
 	}
+
 	return c.read(ctx, sign, src)
 }
 

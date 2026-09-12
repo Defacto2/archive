@@ -38,6 +38,7 @@ func (c *Content) Bz2(ctx context.Context, src string) error {
 	base := sanitize.Name(name)
 	c.Files = append(c.Files, base)
 	c.Ext = bz2x
+
 	return nil
 }
 
@@ -60,9 +61,11 @@ func (x Extractor) Bz2(ctx context.Context) error {
 
 	name := ""
 	var c Content
-	if err := c.Bz2(ctx, x.Source); err != nil {
+	err = c.Bz2(ctx, x.Source)
+	if err != nil {
 		return fmt.Errorf(format, x.Source, err)
 	}
+
 	if len(c.Files) > 0 {
 		name = c.Files[0]
 	}
@@ -89,7 +92,8 @@ func (x Extractor) Bz2(ctx context.Context) error {
 
 	const max1GiB = 1 * 1024 * 1024 * 1024
 	src := io.LimitReader(bzip2.NewReader(f), max1GiB)
-	if _, err := io.Copy(dst, src); err != nil {
+	_, err = io.Copy(dst, src)
+	if err != nil {
 		return fmt.Errorf(format, "copy", err)
 	}
 
@@ -112,9 +116,11 @@ func (c *Content) Bz2Tar(ctx context.Context, src string) error {
 	defer f.Close()
 
 	// Determine output tar filename (e.g., "archive.tar")
-	if err := c.Bz2(ctx, src); err != nil {
+	err = c.Bz2(ctx, src)
+	if err != nil {
 		return fmt.Errorf(format, src, err)
 	}
+
 	name := "archive.tar"
 	if len(c.Files) > 0 {
 		name = c.Files[0]
@@ -140,16 +146,19 @@ func (c *Content) Bz2Tar(ctx context.Context, src string) error {
 
 	// Safely close the temporary target file before inspecting it
 	bzReader := io.LimitReader(bzip2.NewReader(f), maxExtractSize)
-	if _, err = io.Copy(dst, bzReader); err != nil {
+	_, err = io.Copy(dst, bzReader)
+	if err != nil {
 		_ = dst.Close()
 		return fmt.Errorf(format, "decompress bz2", err)
 	}
-	if err := dst.Close(); err != nil {
+	err = dst.Close()
+	if err != nil {
 		return fmt.Errorf(format, "close temp tar", err)
 	}
 
 	// Inspect the decompressed .tar file
-	if err := c.Tar(ctx, tempTarPath); err != nil {
+	err = c.Tar(ctx, tempTarPath)
+	if err != nil {
 		return fmt.Errorf(format, "read tar contents", err)
 	}
 

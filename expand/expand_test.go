@@ -25,6 +25,7 @@ const (
 
 func TestExpand(t *testing.T) {
 	expand.Register()
+
 	tmp := t.TempDir()
 	src := filepath.Join(testdata, testFile)
 

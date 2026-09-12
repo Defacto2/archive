@@ -44,11 +44,16 @@ func (c *Content) Zip7(ctx context.Context, src string) error {
 
 	c.Files = zip7s(out)
 	c.Ext = zip7x
+
 	return nil
 }
 
 // zip7s parses the output of the 7z list command and returns the listed filenames.
 func zip7s(out []byte) []string {
+	if len(out) == 0 {
+		return []string{}
+	}
+
 	var files []string
 	listTable := false
 	listIndex := -1
@@ -104,6 +109,7 @@ func not7zip(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
+
 	return !bytes.Contains(output, []byte("Type = 7z"))
 }
 

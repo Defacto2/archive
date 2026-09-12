@@ -20,7 +20,7 @@ import (
 	"strings"
 )
 
-var ErrPassParse = errors.New("zip archive uses a pass-parse")
+var ErrPassParse = errors.New("pkzip: archive uses a pass-parse")
 
 // Compression is the PKZip compression method used by a ZIP archive file.
 type Compression uint16
@@ -155,13 +155,16 @@ func ExitStatus(err error) Diagnostic {
 	if err == nil {
 		return Normal
 	}
+
 	const (
 		status = "exit status"
 		unused = 99
 	)
+
 	if !strings.HasPrefix(err.Error(), status) {
 		return Diagnostic(unused)
 	}
+
 	s := strings.TrimSpace(strings.TrimPrefix(err.Error(), status))
 	code, err := strconv.ParseUint(s, 10, 16)
 	if err != nil {
@@ -172,26 +175,32 @@ func ExitStatus(err error) Diagnostic {
 }
 
 // Methods returns the PKZip compression methods used in the named file.
-func Methods(name string) (methods []Compression, err error) {
+func Methods(name string) ([]Compression, error) {
 	const format = "pkzip methods: %w"
 	zipf, err := zip.OpenReader(name)
 	if err != nil {
 		return nil, fmt.Errorf(format, err)
 	}
+
 	defer func() {
-		if cErr := zipf.Close(); cErr != nil {
+		cErr := zipf.Close()
+		if cErr != nil {
 			err = errors.Join(err, fmt.Errorf(format, cErr))
 		}
 	}()
-	comp := []Compression{}
+
+	comp := make([]Compression, 0, len(zipf.File))
 	for _, file := range zipf.File {
 		fh := file.FileHeader
+
 		const encrypted = 0x1
 		if locked := fh.Flags&encrypted != 0; locked {
 			return nil, ErrPassParse
 		}
+
 		comp = append(comp, Compression(fh.Method))
 	}
+
 	slices.Sort(comp)
 	return slices.Compact(comp), nil
 }
@@ -205,10 +214,12 @@ func Zip(name string) (bool, error) {
 		const format = "pkzip deflate or store check: %w"
 		return false, fmt.Errorf(format, err)
 	}
+
 	for _, method := range methods {
 		if !method.Zip() {
 			return false, nil
 		}
 	}
+
 	return true, nil
 }

@@ -1,8 +1,13 @@
+//nolint:gochecknoglobals
 package sanitize
 
 import (
 	"path/filepath"
 	"strings"
+)
+
+var sanitizer = strings.NewReplacer(
+	"/", "_", "\x00", "",
 )
 
 // Name applies [filepath.Localize] on the path and
@@ -15,10 +20,7 @@ func Name(path string) string {
 		return s
 	}
 
-	r := strings.NewReplacer(
-		"/", "_", "\x00", "",
-	)
-	clean := strings.TrimSpace(r.Replace(s))
+	clean := strings.TrimSpace(sanitizer.Replace(s))
 	if clean == "" {
 		return "unnamed_file"
 	}
@@ -33,7 +35,9 @@ func Name(path string) string {
 // See: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
 func WindowsName(path string) string {
 	s := path
-	if local, err := filepath.Localize(path); err == nil && local != "" {
+
+	local, err := filepath.Localize(path)
+	if err == nil && local != "" {
 		s = local
 	}
 
@@ -45,14 +49,15 @@ func WindowsName(path string) string {
 	return clean
 }
 
-var windowsNaming = windowsNamingReplacer() //nolint:gochecknoglobals
+var windowsNaming = windowsNamingReplacer()
 
 func windowsNamingReplacer() *strings.Replacer {
 	const asciiControls = 31
+
 	const size = (9 + asciiControls + 1) * 2
 	oldnew := make([]string, 0, size)
 
-	const remove, sep = "", "_"
+	const sep = "_"
 	oldnew = append(oldnew,
 		"<", sep,
 		">", sep,
@@ -64,6 +69,8 @@ func windowsNamingReplacer() *strings.Replacer {
 		"?", sep,
 		"*", sep,
 	)
+
+	const remove = ""
 	for b := byte(0); b <= asciiControls; b++ {
 		oldnew = append(oldnew, string(b), remove)
 	}

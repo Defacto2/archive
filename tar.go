@@ -140,7 +140,7 @@ func (x Extractor) tarReader(ctx context.Context, logger *slog.Logger, r io.Read
 	return nil
 }
 
-func (x Extractor) tarEntry(
+func (x Extractor) tarEntry( //nolint:funlen
 	logger *slog.Logger, src *tar.Reader, hdr *tar.Header, path string,
 ) {
 	if logger == nil || src == nil || hdr == nil {
@@ -160,14 +160,16 @@ func (x Extractor) tarEntry(
 		logger.Debug(msg+"skipping node or link entry", logPaths)
 	case tar.TypeDir:
 		const perm = DirWriteReadRead
-		if err := os.MkdirAll(path, perm); err != nil {
+		err := os.MkdirAll(path, perm)
+		if err != nil {
 			logErr("make a directory", err)
 			return
 		}
 	case tar.TypeReg:
 		perm := DirWriteReadRead
 		parent := filepath.Dir(path)
-		if err := os.MkdirAll(parent, perm); err != nil {
+		err := os.MkdirAll(parent, perm)
+		if err != nil {
 			logErr("make parent directory", err)
 			return
 		}
@@ -196,7 +198,8 @@ func (x Extractor) tarEntry(
 		logger.Debug(msg+" extracted file",
 			slog.String("created path", path), slog.Int64("bytes written", n))
 
-		if err := tarTimes(logger, hdr, path); err != nil {
+		err = tarTimes(logger, hdr, path)
+		if err != nil {
 			logErr("set access times", err)
 		}
 	}
@@ -206,15 +209,19 @@ func tarTimes(logger *slog.Logger, hdr *tar.Header, path string) error {
 	if logger == nil || hdr == nil {
 		return nil
 	}
-	atime := hdr.AccessTime
+
 	mtime := hdr.ModTime
 	if mtime.IsZero() {
 		mtime = time.Now()
 	}
+
+	atime := hdr.AccessTime
 	if atime.IsZero() {
 		atime = mtime
 	}
-	if err := os.Chtimes(path, atime, mtime); err != nil {
+
+	err := os.Chtimes(path, atime, mtime)
+	if err != nil {
 		return fmt.Errorf("tar times %w", err)
 	}
 	return nil
@@ -225,6 +232,7 @@ func supportedTar(r *bufio.Reader) bool {
 	if r == nil {
 		return false
 	}
+
 	const size = 512
 	peek, err := r.Peek(size)
 	if err != nil || len(peek) < size {
@@ -244,5 +252,6 @@ func supportedTar(r *bufio.Reader) bool {
 	if err != nil || hdr == nil {
 		return false
 	}
+
 	return hdr.Name != "" && (hdr.Mode > 0 || hdr.Size >= 0)
 }

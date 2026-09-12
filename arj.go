@@ -31,10 +31,12 @@ func (c *Content) ARJ(ctx context.Context, src string) (err error) {
 	if err != nil {
 		return fmt.Errorf(format, "hard link", err)
 	}
+
 	if name != "" {
 		newname = name
 		defer func() {
-			if cErr := os.Remove(name); cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
+			cErr := os.Remove(name)
+			if cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
 				err = errors.Join(err, fmt.Errorf(format, "remove temp hardlink", cErr))
 			}
 		}()
@@ -132,7 +134,8 @@ func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
 		return ErrDest
 	}
 	const perm = 0o755
-	if err := os.MkdirAll(dst, perm); err != nil {
+	err := os.MkdirAll(dst, perm)
+	if err != nil {
 		return fmt.Errorf(format, "mkdir dst "+dst, err)
 	}
 
@@ -150,7 +153,8 @@ func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
 	if name != "" {
 		newname = name
 		defer func() {
-			if cErr := os.Remove(name); cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
+			cErr := os.Remove(name)
+			if cErr != nil && !errors.Is(cErr, os.ErrNotExist) {
 				err = errors.Join(err, fmt.Errorf(format, "hard link cleanup", err))
 			}
 		}()

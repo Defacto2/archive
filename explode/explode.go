@@ -132,7 +132,8 @@ func (e *explode) Close() error {
 }
 
 func (e *explode) Read(p []byte) (int, error) {
-	if err := e.init(); err != nil {
+	err := e.init()
+	if err != nil {
 		return 0, err
 	}
 
@@ -156,16 +157,19 @@ func (e *explode) Read(p []byte) (int, error) {
 			if err != nil {
 				return n, err
 			}
+
 			e.window[e.position] = b
 			e.position = (e.position + 1) % e.dictionary
 			p[n] = b
 			n++
 		} else {
-			if err := e.match(); err != nil {
+			err := e.match()
+			if err != nil {
 				return n, err
 			}
 		}
 	}
+
 	return n, nil
 }
 
@@ -196,6 +200,7 @@ func (e *explode) literal() (byte, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	return byte(lit & byteMask), nil
 }
 
@@ -289,6 +294,7 @@ func (e *explode) initTrees(count []uint8) error {
 		if err != nil {
 			return err
 		}
+
 		lengths, err = e.treeLength()
 		if err != nil {
 			return err
@@ -305,6 +311,7 @@ func (e *explode) initTrees(count []uint8) error {
 	if err != nil {
 		return err
 	}
+
 	e.distances, err = newTree(distances, symbolsDistance)
 	return err
 }
@@ -322,6 +329,7 @@ func (e *explode) treeLength() ([]uint8, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		count := int((b>>countShift)&lengthNibbleMask) + 1
 		length := uint8((b & lengthNibbleMask) + 1)
 
@@ -342,13 +350,16 @@ func (e *explode) code(n uint) (uint32, error) {
 			}
 			return 0, fmt.Errorf("%w", err)
 		}
+
 		e.bitBuf |= uint32(b) << e.bitCount
 		e.bitCount += byteBits
 	}
+
 	mask := uint32((1 << n) - 1)
 	val := e.bitBuf & mask
 	e.bitBuf >>= n
 	e.bitCount -= n
+
 	return val, nil
 }
 
@@ -363,11 +374,12 @@ type sfTree struct {
 }
 
 func newTree(lengths []uint8, expectedSymbols int) (*sfTree, error) {
-	const format = "expected %d but got %d symbols: %w"
 	length := len(lengths)
 	if length != expectedSymbols {
+		const format = "expected %d but got %d symbols: %w"
 		return nil, fmt.Errorf(format, expectedSymbols, length, ErrCorruptHeader)
 	}
+
 	return buildTree(lengths)
 }
 
@@ -405,6 +417,7 @@ func (t *sfTree) insert(symbol uint16, length uint8, code uint32) {
 	none := node{-1, -1, -1}
 	for i := int(length) - 1; i >= 0; i-- {
 		bit := (code >> uint(i)) & 1
+
 		if bit == 0 {
 			if t.nodes[idx].left == -1 {
 				t.nodes[idx].left = int16(len(t.nodes) & math.MaxInt16)
@@ -413,12 +426,15 @@ func (t *sfTree) insert(symbol uint16, length uint8, code uint32) {
 			idx = int(t.nodes[idx].left)
 			continue
 		}
+
 		if t.nodes[idx].right == -1 {
 			t.nodes[idx].right = int16(len(t.nodes) & math.MaxInt16)
 			t.nodes = append(t.nodes, none)
 		}
+
 		idx = int(t.nodes[idx].right)
 	}
+
 	t.nodes[idx].symbol = int16(symbol & math.MaxInt16)
 }
 
@@ -429,6 +445,7 @@ func (t *sfTree) decode(ir *explode) (uint16, error) {
 		if err != nil {
 			return 0, err
 		}
+
 		bit ^= 1
 		if bit == 0 {
 			idx = int(t.nodes[idx].left)
@@ -440,5 +457,6 @@ func (t *sfTree) decode(ir *explode) (uint16, error) {
 			return 0, ErrCorruptStream
 		}
 	}
+
 	return uint16(t.nodes[idx].symbol), nil
 }

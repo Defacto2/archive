@@ -1,5 +1,7 @@
 // Package rezip provides compression for files and directories to create
 // zip archives using the universal Store and Deflate compression methods.
+//
+//nolint:noinlineerr,nonamedreturns
 package rezip
 
 import (
@@ -18,8 +20,7 @@ import (
 )
 
 const (
-	testArg = "-t"
-
+	testArg      = "-t"
 	createUnique = os.O_RDWR | os.O_CREATE | os.O_EXCL
 )
 
@@ -32,12 +33,15 @@ var ErrTest = errors.New("rezip: test failed")
 // If the dest file already exists, an error is returned.
 func Compress(name, dest string) (count int, err error) {
 	const format = "rezip compress failed to "
+
 	zipfile, err := os.OpenFile(dest, createUnique, helper.WriteWriteRead)
 	if err != nil {
 		return 0, fmt.Errorf(format+"open file: %w", err)
 	}
+
 	defer func() {
-		if cErr := zipfile.Close(); cErr != nil {
+		cErr := zipfile.Close()
+		if cErr != nil {
 			err = errors.Join(err, fmt.Errorf(format+"close dest file: %w", cErr))
 		}
 	}()

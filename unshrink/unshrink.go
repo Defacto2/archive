@@ -105,12 +105,14 @@ func (u *unshrink) Close() error {
 	return nil
 }
 
-func (u *unshrink) Read(p []byte) (n int, err error) {
+func (u *unshrink) Read(p []byte) (int, error) {
+	var n int
 	for n < len(p) {
 		if flush := u.stackTop > 0; flush {
 			u.stackTop--
 			p[n] = u.stack[u.stackTop]
 			n++
+
 			continue
 		}
 
@@ -120,9 +122,11 @@ func (u *unshrink) Read(p []byte) (n int, err error) {
 		}
 
 		if code == controlCode {
-			if n, err = u.code256(n); err != nil {
+			n, err = u.code256(n)
+			if err != nil {
 				return n, err
 			}
+
 			continue
 		}
 
@@ -132,6 +136,7 @@ func (u *unshrink) Read(p []byte) (n int, err error) {
 		u.update()
 		u.lastCode = currentCode
 	}
+
 	return n, nil
 }
 
@@ -144,6 +149,7 @@ func (u *unshrink) kwProblem(code uint16) uint16 {
 		u.stackTop++
 		code = u.lastCode
 	}
+
 	return code
 }
 
@@ -180,6 +186,7 @@ func (u *unshrink) code256(n int) (int, error) {
 	if err != nil {
 		return n, err
 	}
+
 	const (
 		bitExpansion = 1
 		partialClear = 2
@@ -190,6 +197,7 @@ func (u *unshrink) code256(n int) (int, error) {
 	case partialClear:
 		u.partialClear()
 	}
+
 	return n, nil
 }
 
@@ -220,6 +228,7 @@ func (u *unshrink) partialClear() {
 
 func (u *unshrink) code() (uint16, error) {
 	const format = "unshrink code %s: %w"
+
 	for u.bitCount < u.codeSize {
 		b, err := u.r.ReadByte()
 		if err != nil {
@@ -228,14 +237,17 @@ func (u *unshrink) code() (uint16, error) {
 		u.bits |= uint32(b) << u.bitCount
 		u.bitCount += 8
 	}
+
 	mask := uint32((1 << u.codeSize) - 1)
 	bits := u.bits & mask
 	if bits > math.MaxUint16 {
 		return 0, fmt.Errorf(format,
 			fmt.Sprintf("%d exceeds uint16 maximum %d", bits, math.MaxUint16), ErrOverflow)
 	}
+
 	code := uint16(bits)
 	u.bits >>= u.codeSize
 	u.bitCount -= u.codeSize
+
 	return code, nil
 }

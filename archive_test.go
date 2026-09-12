@@ -23,10 +23,12 @@ const (
 var testdata = func() string { //nolint:gochecknoglobals
 	const format = "testdata %s: %v"
 	const path = "testdata"
+
 	dir, err := filepath.Abs(path)
 	if err != nil {
 		panic(fmt.Sprintf(format, "absolute path failed", err))
 	}
+
 	st, err := os.Stat(dir)
 	if err != nil {
 		panic(fmt.Sprintf(format, "missing or unreadable "+dir, err))
@@ -34,6 +36,7 @@ var testdata = func() string { //nolint:gochecknoglobals
 	if !st.IsDir() {
 		panic("testdata is not a directory " + dir)
 	}
+
 	return dir
 }()
 
@@ -58,6 +61,7 @@ func DumpDir(t *testing.T, tempDir string) {
 
 func accessViolation(t *testing.T) bool {
 	t.Helper()
+
 	return runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
 }
 
@@ -91,6 +95,7 @@ func textnames(t *testing.T) [3]string {
 // testingText confirms files match textnames.
 func testingTexts(t *testing.T, files ...string) {
 	t.Helper()
+
 	for _, s := range textnames(t) {
 		be.True(t, slices.Contains(files, s))
 	}
@@ -111,6 +116,7 @@ func testingXTexts(t *testing.T, tempDir string) {
 
 func lowernames(t *testing.T) [3]string {
 	t.Helper()
+
 	return [3]string{
 		strings.ToLower(texts[0].name),
 		strings.ToLower(texts[1].name),
@@ -121,6 +127,7 @@ func lowernames(t *testing.T) [3]string {
 // testingLower confirms files match textnames using lowercase.
 func testingLower(t *testing.T, files ...string) {
 	t.Helper()
+
 	for _, s := range lowernames(t) {
 		be.True(t, slices.Contains(files, s))
 	}
@@ -159,6 +166,7 @@ var mixes = [15]dat{ //nolint:gochecknoglobals
 
 func mixnames(t *testing.T) [15]string {
 	t.Helper()
+
 	return [15]string{
 		mixes[0].name,
 		mixes[1].name,
@@ -181,6 +189,7 @@ func mixnames(t *testing.T) [15]string {
 // testingMixes confirms files match mixnames.
 func testingMixes(t *testing.T, files ...string) {
 	t.Helper()
+
 	for _, s := range mixnames(t) {
 		be.True(t, slices.Contains(files, s))
 	}
@@ -220,11 +229,13 @@ func (c config) extractor(t *testing.T, names []string, data []dat) {
 		if info.IsDir() {
 			return nil
 		}
+
 		find := slices.Index(names, info.Name())
 		t.Log("extractor result>", info.Name(), info.Size())
 		if c.enforceNames {
 			be.True(t, find >= 0)
 		}
+
 		if find >= 0 && find < c.wants {
 			name := data[find].name
 			bytes := data[find].bytes
@@ -232,11 +243,13 @@ func (c config) extractor(t *testing.T, names []string, data []dat) {
 			be.Equal(t, info.Size(), bytes)
 		}
 		count++
+
 		return nil
 	})
 	if err != nil {
 		t.Fatal(c.root, err)
 	}
+
 	be.Equal(t, count, c.wants)
 }
 
@@ -397,6 +410,7 @@ func Tests(t *testing.T) []TestData { //nolint:funlen
 			return tt.cmdDos == "ARJ.EXE" // the arj tool on macOS now gets killed by the system
 		})
 	}
+
 	return tests
 }
 
@@ -416,6 +430,7 @@ func TestData_ReadContent(t *testing.T) {
 				be.Err(t, err)
 				return
 			}
+
 			be.Err(t, err, nil)
 			got := len(c.Files)
 			switch tt.Ext {
@@ -435,6 +450,7 @@ func TestData_Extract(t *testing.T) {
 		const wantThree, wantOne = 3, 1
 		t.Run(tt.Testname, func(t *testing.T) {
 			t.Parallel()
+
 			t.Log("Archive Extract content for", tt.Testname)
 
 			tmp := t.TempDir()
@@ -447,6 +463,7 @@ func TestData_Extract(t *testing.T) {
 				be.Err(t, err)
 				return
 			}
+
 			be.Err(t, err, nil)
 			extracted, err := helper.Count(tmp)
 			be.Err(t, err, nil)

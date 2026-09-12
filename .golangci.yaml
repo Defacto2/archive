@@ -2,22 +2,14 @@ version: '2'
 linters:
   default: all
   disable:
-    - nonamedreturns
-    - depguard
-    - gomodguard
     - nlreturn
-    - noinlineerr
     - paralleltest
     - varnamelen
-    - wsl
     - wsl_v5
-  settings:
-    cyclop:
-      max-complexity: 15
-    misspell:
-      locale: US
-    nonamedreturns:
-      report-error-in-defer: true
+    # retired
+    - exhaustruct
+    - gomodguard
+    - wsl
   exclusions:
     generated: lax
     presets:
@@ -34,7 +26,18 @@ linters:
           - dupl
           - goconst
         path: _test\.go$
-
+  settings:
+    cyclop:
+      max-complexity: 15
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - 'github.com/nalgeon/be'
+            - 'github.com/Defacto2/helper'
+            - 'github.com/Defacto2/magicnumber'
+            - 'github.com/Defacto2/archive'
 formatters:
   enable:
     - gci

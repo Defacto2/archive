@@ -1,3 +1,4 @@
+//nolint:gochecknoglobals
 package archive
 
 import (
@@ -38,8 +39,10 @@ func MagicExt(ctx context.Context, src string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf(format+" lookup %w", err)
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutExtract)
 	defer cancel()
+
 	cmd := exec.CommandContext(ctx, prog, "--brief", src)
 	out, err := cmd.Output()
 	if err != nil {
@@ -48,25 +51,12 @@ func MagicExt(ctx context.Context, src string) (string, error) {
 	if len(out) == 0 {
 		return "", fmt.Errorf(format+" type: %w", ErrRead)
 	}
-	magics := map[string]string{
-		// note these are the outputs from the `file` command
-		"arc archive data":                  arcx,
-		"arj archive data":                  arjx,
-		"bzip2 compressed data":             bz2x,
-		"microsoft cabinet archive data":    cabx,
-		"gzip compressed data":              gzipx,
-		"pak archive data":                  pakx,
-		"rar archive data":                  rarx,
-		"posix tar archive":                 tarx,
-		"xz compressed data":                xzx,
-		"zip archive data":                  zipx,
-		"7-zip archive data":                zip7x,
-		"zstandard compressed data (v0.8+)": zstdx,
-	}
+
 	result := strings.Split(strings.ToLower(string(out)), ",")
 	if len(result) == 0 {
 		return "", ErrNotArchive
 	}
+
 	magic := strings.TrimSpace(result[0])
 	if foundLHA(magic) {
 		return lhax, nil
@@ -74,6 +64,7 @@ func MagicExt(ctx context.Context, src string) (string, error) {
 	if foundTGZ(magic, src) {
 		return tgzx, nil
 	}
+
 	for pattern, ext := range magics {
 		if magic == pattern {
 			return ext, nil
@@ -82,30 +73,47 @@ func MagicExt(ctx context.Context, src string) (string, error) {
 	return "", fmt.Errorf(format+" %w: '%s'", ErrExt, magic)
 }
 
+var magics = map[string]string{
+	// note these are the outputs from the `file` command
+	"arc archive data":                  arcx,
+	"arj archive data":                  arjx,
+	"bzip2 compressed data":             bz2x,
+	"microsoft cabinet archive data":    cabx,
+	"gzip compressed data":              gzipx,
+	"pak archive data":                  pakx,
+	"rar archive data":                  rarx,
+	"posix tar archive":                 tarx,
+	"xz compressed data":                xzx,
+	"zip archive data":                  zipx,
+	"7-zip archive data":                zip7x,
+	"zstandard compressed data (v0.8+)": zstdx,
+}
+
 // foundLHA returns true if the LHA file type is matched in the magic string.
 func foundLHA(magic string) bool {
 	words := strings.Split(magic, " ")
 	if len(words) < 1 {
 		return false
 	}
-	const lha, lharc = "lha", "lharc"
-	if words[0] == lharc {
-		return true
-	}
-	if words[0] != lha {
-		return false
-	}
+
+	const lha = "lha"
+	const lharc = "lharc"
 	const limit = 4
-	if len(words) < limit {
+
+	switch {
+	case words[0] == lharc:
+		return true
+	case words[0] != lha:
+		return false
+	case len(words) < limit:
+		return false
+	case strings.Join(words[0:3], " ") == "lha archive data":
+		return true
+	case strings.Join(words[2:4], " ") == "archive data":
+		return true
+	default:
 		return false
 	}
-	if strings.Join(words[0:3], " ") == "lha archive data" {
-		return true
-	}
-	if strings.Join(words[2:4], " ") == "archive data" {
-		return true
-	}
-	return false
 }
 
 // foundTGZ returns true if a Tar archive with Gzip compression is matched in the src file.
@@ -113,6 +121,7 @@ func foundTGZ(magic, src string) bool {
 	if magic != "gzip compressed data" {
 		return false
 	}
+
 	name := strings.ToLower(filepath.Base(src))
 	return strings.HasSuffix(name, ".tar.gz")
 }

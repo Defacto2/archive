@@ -17,7 +17,8 @@ import (
 func (c *Content) Gzip(ctx context.Context, src string) error {
 	const format = "content gzip %s %w"
 
-	if err := ctx.Err(); err != nil {
+	err := ctx.Err()
+	if err != nil {
 		return fmt.Errorf(format, "timeout", err)
 	}
 
@@ -40,6 +41,7 @@ func (c *Content) Gzip(ctx context.Context, src string) error {
 
 	c.Files = append(c.Files, name)
 	c.Ext = gzipx
+
 	return nil
 }
 
@@ -74,17 +76,16 @@ func (c *Content) GzipTar(ctx context.Context, src string) error {
 	defer os.RemoveAll(tempDir)
 
 	r := bufio.NewReader(rd)
-	x := Extractor{
+	extract := Extractor{
 		Source:      "", // not needed
 		Destination: tempDir,
 	}
-	err = x.singleFile(r, name)
+	err = extract.singleFile(r, name)
 	if err != nil {
 		return fmt.Errorf(format, "temp directory", err)
 	}
 
-	tempTar := filepath.Join(tempDir, name)
-	return c.Tar(ctx, tempTar)
+	return c.Tar(ctx, filepath.Join(tempDir, name))
 }
 
 // Gzip extracts the compressed file from a gzip archive.
@@ -137,7 +138,8 @@ func (x Extractor) singleFile(r io.Reader, name string) error {
 	}
 	defer dst.Close()
 
-	if _, err := io.Copy(dst, r); err != nil {
+	_, err = io.Copy(dst, r)
+	if err != nil {
 		return fmt.Errorf(format, "copy", err)
 	}
 	return nil
@@ -151,5 +153,6 @@ func gzipName(src string) string {
 	if i := strings.LastIndex(base, "."); i > 0 {
 		return base[:i]
 	}
+
 	return base
 }

@@ -1,3 +1,4 @@
+//nolint:cyclop
 package archive
 
 import (
@@ -45,21 +46,24 @@ func (x Extractor) Extract(ctx context.Context, targets ...string) (err error) {
 	if err != nil {
 		return fmt.Errorf(format, "open", err)
 	}
+
 	defer func() {
-		if cErr := file.Close(); cErr != nil {
+		cErr := file.Close()
+		if cErr != nil {
 			err = errors.Join(err, fmt.Errorf(format, "cannot close", cErr))
 		}
 	}()
+
 	sign, err := magicnumber.Archive(file)
 	if err != nil {
 		return fmt.Errorf(format, "magic", err)
 	}
+
 	return x.lookup(ctx, sign, targets...)
 }
 
 // Run executes an extraction command, capturing stderr and context timeouts.
 func (x Extractor) Run(ctx context.Context, file, prog string, arg ...string) error {
-	const format = "run %s extractor %s %w"
 	cmd := exec.CommandContext(ctx, prog, arg...)
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
@@ -68,9 +72,11 @@ func (x Extractor) Run(ctx context.Context, file, prog string, arg ...string) er
 	if err == nil {
 		return nil
 	}
+	const format = "run %s extractor %s %w"
 	if ctx.Err() != nil {
 		return fmt.Errorf(format, file, "timeout", ctx.Err())
 	}
+
 	stderrStr := strings.TrimSpace(stderrBuf.String())
 	if stderrStr != "" {
 		return fmt.Errorf(format, file, "exec "+stderrStr, err)
@@ -93,18 +99,24 @@ func (x Extractor) Zips(ctx context.Context, targets ...string) error {
 	if errors.Is(err, pkzip.ErrPassParse) {
 		return fmt.Errorf(format, "password", err)
 	}
+
 	err = x.ZipUnzip(ctx, targets...)
 	if err == nil {
 		return nil
 	}
+
 	if len(targets) > 0 {
-		if uErr := x.Unar(ctx, targets...); uErr != nil {
+		err = x.Unar(ctx, targets...)
+		if err != nil {
 			return fmt.Errorf(format, "all methods", err)
 		}
 		return nil
 	}
-	if hErr := x.ZipHW(ctx); hErr != nil {
-		if uErr := x.Unar(ctx); uErr != nil {
+
+	hErr := x.ZipHW(ctx)
+	if hErr != nil {
+		uErr := x.Unar(ctx)
+		if uErr != nil {
 			return fmt.Errorf(format, "all methods", err)
 		}
 	}
@@ -115,7 +127,7 @@ func (x Extractor) Zips(ctx context.Context, targets ...string) error {
 //
 // Compressed tarballs signatures are determined by the compression method, not the tarball format.
 // For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
-func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targets ...string) error { //nolint:cyclop
+func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targets ...string) error {
 	filename := filepath.Base(x.Source)
 	switch handles(sign, filename) { //nolint:exhaustive
 	case handleAppleSilicon:
@@ -155,6 +167,6 @@ func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targe
 	case handleZStandard:
 		return x.Zip7(ctx, targets...)
 	default:
+		return handleUnknown(sign)
 	}
-	return handleUnknown(sign)
 }

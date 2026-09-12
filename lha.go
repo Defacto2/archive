@@ -20,10 +20,10 @@ import (
 //
 // [lha program]: https://fragglet.github.io/lhasa/
 func (c *Content) LHA(ctx context.Context, src string) error {
-	const format = "content lha %s %w"
 	const file = command.Lha
 	prog, err := exec.LookPath(file)
 	if err != nil {
+		const format = "content lha %s %w"
 		return fmt.Errorf(format, "look path", err)
 	}
 
@@ -42,11 +42,16 @@ func (c *Content) LHA(ctx context.Context, src string) error {
 
 	c.Files = lhas(out)
 	c.Ext = lhax
+
 	return nil
 }
 
 // lhas parses the output of the lha list command and returns the listed filenames.
 func lhas(out []byte) []string {
+	if len(out) == 0 {
+		return []string{}
+	}
+
 	var files []string
 	listTable := false
 	listIndex := -1
@@ -61,8 +66,10 @@ func lhas(out []byte) []string {
 				// top border
 				listTable = true
 				listIndex = strings.LastIndex(line, " ") + 1
+
 				continue
 			}
+
 			// bottom border
 			break
 		}
@@ -87,12 +94,14 @@ func notLHA(output []byte) bool {
 	if len(output) == 0 {
 		return true
 	}
+
 	var clean strings.Builder
 	for _, r := range string(output) {
 		if !unicode.IsSpace(r) {
 			clean.WriteRune(r)
 		}
 	}
+
 	s := clean.String()
 
 	// match "Total 0 files 0" regardless of space count or types
@@ -118,6 +127,7 @@ func (x Extractor) LHA(ctx context.Context, targets ...string) error {
 	if dst == "" {
 		return ErrDest
 	}
+
 	prog, err := exec.LookPath(file)
 	if err != nil {
 		return fmt.Errorf(format, "look path", err)

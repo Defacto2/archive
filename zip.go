@@ -1,3 +1,4 @@
+//nolint:gochecknoinits,nonamedreturns
 package archive
 
 import (
@@ -41,7 +42,7 @@ const (
 	Deflate
 )
 
-func init() { //nolint:gochecknoinits
+func init() {
 	// one time registation to enable archive/zip to handle shrink, reduce, and implode compression methods
 	unshrink.Register()
 	expand.Register()
@@ -72,7 +73,8 @@ func (z ZipMethod) String() string {
 func (c *Content) Zip(ctx context.Context, src string) error {
 	const format = "zip contents %s %w"
 
-	if err := ctx.Err(); err != nil {
+	err := ctx.Err()
+	if err != nil {
 		return fmt.Errorf(format, "timeout", err)
 	}
 
@@ -87,6 +89,7 @@ func (c *Content) Zip(ctx context.Context, src string) error {
 		c.Files = append(c.Files, f.Name)
 	}
 	c.Ext = zipx
+
 	return nil
 }
 
@@ -102,6 +105,7 @@ func (x Extractor) Zip(ctx context.Context, targets ...string) error {
 		return err
 	}
 	defer rc.Close()
+
 	return x.zipSkipErrors(ctx, logger, rc, targets...)
 }
 
@@ -119,6 +123,7 @@ func (x Extractor) ZipWithLogger(ctx context.Context, logger *slog.Logger, targe
 		return err
 	}
 	defer rc.Close()
+
 	return x.zipSkipErrors(ctx, logger, rc, targets...)
 }
 
@@ -135,6 +140,7 @@ func (x Extractor) ZipStrict(ctx context.Context, targets ...string) error {
 		return err
 	}
 	defer rc.Close()
+
 	return x.zipStrict(ctx, rc, targets...)
 }
 
@@ -157,6 +163,7 @@ func (x Extractor) zipReadCloser(logger *slog.Logger) (*zip.ReadCloser, error) {
 			slog.String("source", x.Source), slog.Any("error", err))
 		return nil, fmt.Errorf(format, "open source", err)
 	}
+
 	return rc, nil
 }
 
@@ -200,12 +207,14 @@ func (x Extractor) zipSkipErrors( //nolint:funlen
 
 		// create directories directly without opening file handles
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(path, DirWriteReadRead); err != nil {
+			err := os.MkdirAll(path, DirWriteReadRead)
+			if err != nil {
 				logErr("cannot create directory", err)
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(path), DirWriteReadRead); err != nil {
+		err := os.MkdirAll(filepath.Dir(path), DirWriteReadRead)
+		if err != nil {
 			logErr("cannot create parent directory", err)
 			continue
 		}
@@ -231,7 +240,8 @@ func (x Extractor) zipSkipErrors( //nolint:funlen
 		}
 		logger.Debug(msg+" extracted file", logName, slog.Int64("bytes written", n))
 
-		if err := zipTimes(f, path); err != nil {
+		err = zipTimes(f, path)
+		if err != nil {
 			logErr("set modified time", err)
 		}
 	}
@@ -261,12 +271,14 @@ func (x Extractor) zipStrict(ctx context.Context, rc *zip.ReadCloser, targets ..
 		path := filepath.Join(x.Destination, local)
 		if f.FileInfo().IsDir() {
 			// create directories directly without opening file handles
-			if err := os.MkdirAll(path, DirWriteReadRead); err != nil {
+			err := os.MkdirAll(path, DirWriteReadRead)
+			if err != nil {
 				return fmt.Errorf(format, "mkdir", err)
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(path), DirWriteReadRead); err != nil {
+		err := os.MkdirAll(filepath.Dir(path), DirWriteReadRead)
+		if err != nil {
 			return fmt.Errorf(format, "mkdir parent", err)
 		}
 
@@ -287,7 +299,8 @@ func (x Extractor) zipStrict(ctx context.Context, rc *zip.ReadCloser, targets ..
 			return fmt.Errorf(format, "copy", err)
 		}
 
-		if err := zipTimes(f, path); err != nil {
+		err = zipTimes(f, path)
+		if err != nil {
 			return fmt.Errorf(format, "set time", err)
 		}
 	}
@@ -331,6 +344,7 @@ func zipCopier(dst *os.File, rc io.ReadCloser, f *zip.File) (written int64, err 
 		const format = "zip archive crc32 does not match, '%X' vs '%X' %w"
 		err = errors.Join(err, fmt.Errorf(format, f.CRC32, sum32, ErrCorruption))
 	}
+
 	return written, err
 }
 
@@ -339,9 +353,11 @@ func zipPerm(f *zip.File) fs.FileMode {
 	if f == nil {
 		return def
 	}
+
 	if mode := f.Mode(); mode != 0 {
 		return mode
 	}
+
 	return def
 }
 
@@ -349,24 +365,29 @@ func zipSize(f *zip.File) int64 {
 	if f == nil {
 		return -1
 	}
-	n := int64(math.MaxInt64)
+
 	if f.UncompressedSize64 < math.MaxInt64 {
-		n = int64(f.UncompressedSize64)
+		return int64(f.UncompressedSize64)
 	}
-	return n
+
+	return int64(math.MaxInt64)
 }
 
 func zipTimes(f *zip.File, path string) error {
 	if f == nil {
 		return nil
 	}
+
 	mtime := f.Modified
 	if mtime.IsZero() {
 		mtime = time.Now()
 	}
-	if err := os.Chtimes(path, mtime, mtime); err != nil {
+
+	err := os.Chtimes(path, mtime, mtime)
+	if err != nil {
 		return fmt.Errorf("zip times %w", err)
 	}
+
 	return nil
 }
 
@@ -384,10 +405,10 @@ func zipVerified(f *zip.File, sum32 uint32) bool {
 //
 // [zipinfo program]: https://infozip.sourceforge.net/
 func (c *Content) ZipInfo(ctx context.Context, src string) error {
-	const format = "content zipinfo %s %w"
 	const file = command.ZipInfo
 	prog, err := exec.LookPath(file)
 	if err != nil {
+		const format = "content zipinfo %s %w"
 		return fmt.Errorf(format, "look path", err)
 	}
 
@@ -407,6 +428,7 @@ func (c *Content) ZipInfo(ctx context.Context, src string) error {
 
 	c.Files = zipInfos(out)
 	c.Ext = zipx
+
 	return nil
 }
 
@@ -414,12 +436,15 @@ func (c *Content) ZipInfo(ctx context.Context, src string) error {
 // It is needed by [Content.zipInfos] and otherwise can be ignored.
 func zipInfos(out []byte) []string {
 	files := strings.Split(string(out), "\n")
+
 	files = slices.DeleteFunc(files, func(s string) bool {
 		return strings.TrimSpace(s) == ""
 	})
+
 	for i, f := range files {
 		files[i] = strings.TrimRight(f, "\r")
 	}
+
 	return files
 }
 

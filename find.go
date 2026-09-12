@@ -17,22 +17,27 @@ func (f Finds) BestMatch() string {
 	if len(f) == 0 {
 		return ""
 	}
+
 	type match struct {
 		Filename  string
 		Usability Usability
 	}
+
 	matches := make([]match, len(f))
 	i := 0
 	for k, v := range f {
 		matches[i] = match{k, v}
 		i++
 	}
+
 	slices.SortStableFunc(matches, func(a, b match) int {
 		return cmp.Compare(a.Usability, b.Usability)
 	})
+
 	for _, m := range matches {
 		return m.Filename // return first result
 	}
+
 	return ""
 }
 
@@ -45,8 +50,7 @@ func Readme(filename string, files ...string) string {
 	for _, file := range files {
 		name := strings.ToLower(file)
 		base := strings.ToLower(strings.TrimSuffix(filename, filepath.Ext(filename)))
-		ext := strings.ToLower(filepath.Ext(name))
-		switch ext {
+		switch strings.ToLower(filepath.Ext(name)) {
 		case diz, nfo, txt:
 			// okay
 		default:
@@ -54,6 +58,7 @@ func Readme(filename string, files ...string) string {
 		}
 		finds = matchs(file, name, base, finds)
 	}
+
 	return finds.BestMatch()
 }
 

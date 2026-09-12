@@ -130,7 +130,8 @@ func (e *expand) Read(p []byte) (int, error) {
 	}
 
 	if !e.followersRead {
-		if err := e.loadFollowers(); err != nil {
+		err := e.loadFollowers()
+		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return 0, io.ErrUnexpectedEOF
 			}
@@ -168,7 +169,6 @@ func (e *expand) Read(p []byte) (int, error) {
 }
 
 func (e *expand) loadFollowers() error {
-	const format = "expand load followers %s: %w"
 	const bits = 6
 	const maxBytes = 32
 	for i := 255; i >= 0; i-- {
@@ -179,22 +179,29 @@ func (e *expand) loadFollowers() error {
 		if n > maxBytes {
 			return ErrCorruptData
 		}
+
 		e.followers[i].size = uint8(n)
 		e.followers[i].idxBits = followerBits(int(n))
+
 		const bits = 8
 		for j := range n {
 			b, err := e.code(bits)
 			if err != nil {
 				return err
 			}
+
 			if b > math.MaxUint8 {
+				const format = "expand load followers %s: %w"
 				return fmt.Errorf(format,
 					fmt.Sprintf("%d exceeds uint8 maximum %d", bits, math.MaxUint8), ErrOverflow)
 			}
+
 			e.followers[i].followers[j] = byte(b)
 		}
 	}
+
 	e.followersRead = true
+
 	return nil
 }
 
@@ -228,23 +235,27 @@ func followerBits(n int) uint8 {
 }
 
 func (e *expand) code(bits uint) (uint32, error) {
-	const format = "expand code %s: %w"
 	for e.bitCount < bits {
 		b, err := e.r.ReadByte()
 		if err != nil {
+			const format = "expand code %s: %w"
 			return 0, fmt.Errorf(format, "byte", err)
 		}
+
 		e.bits |= uint32(b) << e.bitCount
 		e.bitCount += 8
 	}
+
 	val := e.bits & ((1 << bits) - 1)
 	e.bits >>= bits
 	e.bitCount -= bits
+
 	return val, nil
 }
 
 func (e *expand) traverse() (byte, error) {
 	const format = "expand traverse %s: %w"
+
 	fset := &e.followers[e.prevByte]
 	var b byte
 
@@ -254,31 +265,39 @@ func (e *expand) traverse() (byte, error) {
 		if err != nil {
 			return 0, err
 		}
+
 		if n > math.MaxUint8 {
 			return 0, fmt.Errorf(format,
 				fmt.Sprintf("%d exceeds uint8 maximum %d", n, math.MaxUint8), ErrOverflow)
 		}
+
 		b = byte(n)
 		e.prevByte = b
+
 		return b, nil
 	}
+
 	const bits = 1
 	tag, err := e.code(bits)
 	if err != nil {
 		return 0, err
 	}
+
 	if tag == 1 {
 		const bits = 8
 		n, err := e.code(bits)
 		if err != nil {
 			return 0, err
 		}
+
 		if n > math.MaxUint8 {
 			return 0, fmt.Errorf(format,
 				fmt.Sprintf("%d exceeds uint8 maximum %d", n, math.MaxUint8), ErrOverflow)
 		}
+
 		b = byte(n)
 		e.prevByte = b
+
 		return b, nil
 	}
 
@@ -286,16 +305,18 @@ func (e *expand) traverse() (byte, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	if idx >= uint32(fset.size) {
 		return 0, ErrCorruptData
 	}
+
 	b = fset.followers[idx]
 	e.prevByte = b
+
 	return b, nil
 }
 
 func (e *expand) next() error {
-	const format = "expand next %s: %w"
 	b, err := e.traverse()
 	if err != nil {
 		return err
@@ -322,6 +343,7 @@ func (e *expand) next() error {
 
 	matchLen := int(uint32(v) & vLenMask)
 	if matchLen > math.MaxUint32 {
+		const format = "expand next %s: %w"
 		return fmt.Errorf(format,
 			fmt.Sprintf("%d exceeds uint32 maximum %d", matchLen, math.MaxUint32), ErrOverflow)
 	}
@@ -333,14 +355,15 @@ func (e *expand) next() error {
 		}
 		matchLen += int(extraLen)
 	}
+
 	matchLen += 3
 
 	w, err := e.traverse()
 	if err != nil {
 		return err
 	}
-	matchDist := int((uint32(v)>>vLenBits)*256 + uint32(w) + 1)
 
+	matchDist := int((uint32(v)>>vLenBits)*256 + uint32(w) + 1)
 	for range matchLen {
 		var out byte
 		if int64(matchDist) > e.totalWritten {
