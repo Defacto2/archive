@@ -364,7 +364,7 @@ func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //
 	}
 
 	local := sanitize.Name(src)
-	path, mErr := helper.MkContent(local)
+	path, mErr := mkContent(local)
 	if mErr != nil {
 		return "", fmt.Errorf(format, "content directory", mErr)
 	}
@@ -425,6 +425,37 @@ func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //
 		return "", fmt.Errorf(format, "exec", xErr)
 	}
 	return path, nil
+}
+
+// mkContent returns the destination directory for the extracted archive content.
+// The directory is created if it does not exist. The directory is named after the source file
+// using the "df2app-" pattern prefix.
+func mkContent(src string) (string, error) {
+	const format = "make content %s: %w"
+
+	if !filepath.IsLocal(src) {
+		return "", fmt.Errorf(format, "invalid path "+src, filepath.ErrBadPattern)
+	}
+
+	base := filepath.Base(src)
+	base = strings.TrimSpace(strings.ToLower(base))
+	pattern := "df2app-" + base
+	dst := filepath.Join(os.TempDir(), pattern)
+
+	err := os.MkdirAll(dst, DirWriteReadRead)
+	if err != nil {
+		return "", fmt.Errorf(format, "mkdir all", err)
+	}
+
+	st, err := os.Stat(dst)
+	if err != nil {
+		return "", fmt.Errorf(format, "stat", err)
+	}
+	if !st.IsDir() {
+		return "", fmt.Errorf(format, dst, os.ErrExist)
+	}
+
+	return dst, nil
 }
 
 // ExtractSource extracts the source file to a temporary directory,

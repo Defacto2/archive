@@ -3,11 +3,12 @@ module github.com/Defacto2/archive
 go 1.26.8
 
 require (
-	github.com/Defacto2/helper v1.7.0
-	github.com/Defacto2/magicnumber v1.4.0
+	github.com/Defacto2/helper v1.7.3
+	github.com/Defacto2/magicnumber v1.4.1
 	github.com/nalgeon/be v0.3.0
 )
 
+//	replace github.com/Defacto2/helper => ../helper
 //	replace github.com/Defacto2/magicnumber => ../magicnumber
 
 require (
