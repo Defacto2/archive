@@ -15,7 +15,9 @@ var sanitizer = strings.NewReplacer(
 //   - "/" with "_"
 //   - "\x00" (null) with ""
 func Name(path string) string {
-	s, err := filepath.Localize(path)
+	// filepath localize does not permit root paths
+	p := strings.TrimLeft(path, "/")
+	s, err := filepath.Localize(p)
 	if err == nil {
 		return s
 	}
