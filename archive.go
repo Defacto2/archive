@@ -333,7 +333,7 @@ func ExtractAll(ctx context.Context, src, dst string) error {
 // The returned string is the absolute path to the extracted
 // temporary directory.
 func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //nolint:funlen
-	const format = "extract source archive %s %w"
+	const format = "archive extract temp: %s: %w"
 
 	const size150MB = 150 * 1024 * 1024
 
@@ -362,6 +362,9 @@ func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //
 	if aErr != nil {
 		return "", fmt.Errorf(format, "magic", aErr)
 	}
+	if handles(sign, filepath.Base(src)) == handleNone {
+		return "", fmt.Errorf(format, "magic", ErrNotArchive)
+	}
 
 	local := sanitize.Name(src)
 	path, mErr := mkContent(local)
@@ -378,23 +381,6 @@ func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //
 			}
 		}
 	}()
-
-	if sign == magicnumber.Unknown {
-		// handle non-archive files
-		pattern := sanitize.Name(filepath.Base(src)) + "-*"
-		f, err := os.CreateTemp(path, pattern)
-		if err != nil {
-			return "", fmt.Errorf(format, "create temp file", err)
-		}
-
-		newpath := filepath.Join(path, f.Name())
-		_, cErr := helper.DuplicateOW(src, newpath)
-		if cErr != nil {
-			return "", fmt.Errorf(format, "duplicate file", cErr)
-		}
-
-		return path, nil
-	}
 
 	entries := 0
 	// counter is used instead of os.ReadDir to handle edge-case
