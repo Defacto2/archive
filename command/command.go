@@ -49,14 +49,11 @@ const (
 // with LHA/LZH archives. Bottle can provide a path to newer, fixed versions.
 func Bottle(name string) string {
 	prog := filepath.Join(HomeBrew, name)
-	info, err := os.Stat(prog)
+	info, err := os.Lstat(prog)
 	if err != nil {
 		return name
 	}
 	mode := info.Mode()
-	if !mode.IsRegular() {
-		return name
-	}
 	const exeBit = 0o111
 	if ok := mode&exeBit != 0; !ok {
 		return name
