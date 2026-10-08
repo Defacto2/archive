@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Defacto2/archive/command"
@@ -396,56 +395,6 @@ func zipVerified(f *zip.File, sum32 uint32) bool {
 		return false
 	}
 	return f.CRC32 == sum32
-}
-
-// ZipInfo returns the content of the src ZIP archive using the [zipinfo program].
-// The zip format is credited to Phil Katz.
-//
-// The use of [Content.Zip] is preferred over this method.
-//
-// [zipinfo program]: https://infozip.sourceforge.net/
-func (c *Content) ZipInfo(ctx context.Context, src string) error {
-	const file = command.ZipInfo
-	prog, err := exec.LookPath(file)
-	if err != nil {
-		const format = "content zipinfo %s %w"
-		return fmt.Errorf(format, "look path", err)
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
-	defer cancel()
-
-	const list = "-1"
-	const stopParsing = "--" // prevent files named with "-" from being parsed as flags
-	out, err := c.Run(ctx, file, prog, list, stopParsing, src)
-	if err != nil {
-		return err
-	}
-
-	if len(out) == 0 {
-		return ErrRead
-	}
-
-	c.Files = zipInfos(out)
-	c.Ext = zipx
-
-	return nil
-}
-
-// zipInfos cleans and splits the raw "zipinfo -1" output into a slice of filenames.
-// It is needed by [Content.zipInfos] and otherwise can be ignored.
-func zipInfos(out []byte) []string {
-	files := strings.Split(string(out), "\n")
-
-	files = slices.DeleteFunc(files, func(s string) bool {
-		return strings.TrimSpace(s) == ""
-	})
-
-	for i, f := range files {
-		files[i] = strings.TrimRight(f, "\r")
-	}
-
-	return files
 }
 
 // ZipUnzip extracts the content of the src ZIP archive using the [unzip program].

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Defacto2/archive/command"
 	"github.com/Defacto2/magicnumber"
 )
 
@@ -83,12 +82,6 @@ func (c *Content) Run(ctx context.Context, file, prog string, arg ...string) ([]
 
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf(format, "timeout", file, ctx.Err())
-	}
-	if file == command.ZipInfo {
-		// handle broken ZIPs that may offer a partial file listing
-		if stderrBuf.Len() > 0 && len(out) > 0 {
-			return out, nil
-		}
 	}
 
 	stderrStr := strings.TrimSpace(stderrBuf.String())

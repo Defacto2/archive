@@ -61,42 +61,6 @@ func TestZipContent(t *testing.T) {
 	}
 }
 
-func TestZipInfoContent(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		filename string
-		wantErr  bool
-	}{
-		{TestPK1, false},
-		{TestPK2, false},
-		{TestPK3, false},
-		// {TestImpode, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.filename, func(t *testing.T) {
-			t.Parallel()
-
-			src := filepath.Join(testdata, tt.filename)
-			var c archive.Content
-			err := c.ZipInfo(t.Context(), src)
-			if tt.wantErr {
-				be.Err(t, err)
-				return
-			}
-
-			be.Err(t, err, nil)
-
-			count := len(c.Files)
-			const want = 15
-			be.Equal(t, c.Ext, ".zip")
-			be.Equal(t, count, want)
-			testingMixes(t, c.Files...)
-		})
-	}
-}
-
 func TestZipExtractor(t *testing.T) {
 	t.Parallel()
 

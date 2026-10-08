@@ -11,26 +11,17 @@
 //   - [arc] - arc - pc archive utility
 //   - [arj] - (deprecated: on macOS) "Open-source ARJ" v3.10
 //   - [bsdtar] - BSD tar that uses the libarchive(3) library
-//   - [gcab] - Authored by Marc-André Lureau and found with in the Gnome msitools package
 //   - [lha] - Lhasa v0.4 LHA tool found in the jlha-utils or lhasa packages
 //   - [unar] - The Unarchiver, both "unar" and "lsar"
 //   - [unrar] - 6.24 freeware by Alexander Roshal, not the common [unrar-free] which is feature incomplete
-//   - [zipinfo] - ZipInfo v3 by the Info-ZIP workgroup
-//   - [hwzip] - (deprecated) hwzip for BBS era ZIP file that uses obsolete compression methods
-//   - [tar] - (deprecated) GNU tar
 //
 // [7zz]: https://www.7-zip.org/
 // [arc]: https://linux.die.net/man/1/arc
 // [arj]: https://arj.sourceforge.net/
 // [bsdtar]: https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html
 // [lha]: https://fragglet.github.io/lhasa/
-// [hwzip]: https://www.hanshq.net/zip.html
-// [tar]: https://www.gnu.org/software/tar/
 // [unrar]: https://www.rarlab.com/rar_add.htm
 // [unrar-free]: https://gitlab.com/bgermann/unrar-free
-// [zipinfo]: https://infozip.sourceforge.net/
-// [gcab]: https://man.archlinux.org/man/gcab.1.en
-// [unar]: https://theunarchiver.com/command-line
 //
 //nolint:cyclop,nonamedreturns
 package archive

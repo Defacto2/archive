@@ -15,20 +15,17 @@ import (
 // "UNRAR 6.24 freeware, Copyright (c) 1993-2023 Alexander Roshal".
 
 const (
-	Arc     = "arc"     // Arc is the arc decompression command.
-	Arj     = "arj"     // Arj is the arj decompression command.
-	BSDTar  = "bsdtar"  // BSDTar is the tar decompression command.
-	Cab     = "gcab"    // Cab is the gcab decompression command for Microsoft Cabinet.
-	Gzip    = "gzip"    // Gzip is the gzip decompression command.
-	HWZip   = "hwzip"   // Deprecated: Hwzip the zip decompression command for files using obsolete methods.
-	Lha     = "lha"     // Lha is the lha/lzh decompression command.
-	Lsar    = "lsar"    // Lsar is The Unarchive list command usable on multiple types.
-	Tar     = "tar"     // Tar is the tar decompression command.
-	Unar    = "unar"    // Unar is The Unarchiver decompression command usable on multiple types.
-	Unrar   = "unrar"   // Unrar is the rar decompression command.
-	Unzip   = "unzip"   // Unzip is the zip decompression command.
-	Zip7    = "7zz"     // Zip7 is the 7-Zip decompression command.
-	ZipInfo = "zipinfo" // ZipInfo is the zip information command.
+	Arc    = "arc"    // Arc is the arc decompression command.
+	Arj    = "arj"    // Arj is the arj decompression command.
+	BSDTar = "bsdtar" // BSDTar is the tar decompression command.
+	Cab    = "gcab"   // Cab is the gcab decompression command for Microsoft Cabinet.
+	HWZip  = "hwzip"  // Deprecated: Hwzip the zip decompression command for files using obsolete methods.
+	Lha    = "lha"    // Lha is the lha/lzh decompression command.
+	Lsar   = "lsar"   // Lsar is The Unarchive list command usable on multiple types.
+	Unar   = "unar"   // Unar is The Unarchiver decompression command usable on multiple types.
+	Unrar  = "unrar"  // Unrar is the rar decompression command.
+	Unzip  = "unzip"  // Unzip is the zip decompression command.
+	Zip7   = "7zz"    // Zip7 is the 7-Zip decompression command.
 )
 
 const (

@@ -84,10 +84,9 @@ func (pi *ProgInfo) Lookup(ctx context.Context, name, arg string,
 func progOutput(name string, b []byte) string {
 	firsts := []string{
 		command.Arc, command.Arj,
-		command.Gzip, command.HWZip,
-		command.Lha, command.Tar,
+		command.HWZip, command.Lha,
 		command.Unrar, command.Unzip,
-		command.Zip7, command.ZipInfo,
+		command.Zip7,
 	}
 
 	switch {
@@ -117,42 +116,35 @@ func progOutput(name string, b []byte) string {
 	}
 }
 
-const n = 14 // n is the number of array objects used for ProgInfos
+const n = 11 // n is the number of array objects used for ProgInfos
 
 // ProgInfos returns the program versions of the various commands
 // referenced by this archive package.
 func ProgInfos(ctx context.Context) [n]ProgInfo {
 	vers := [n]ProgInfo{}
-	cmds := [n]string{
+	cmds := [...]string{
 		command.Zip7,
 		command.Arc,
 		command.Arj,
 		command.BSDTar,
-		command.Cab + "x",
-		command.Gzip,
+		command.Cab,
 		command.HWZip,
 		command.Lha,
-		command.Tar,
 		command.Unrar,
 		command.Unzip,
-		command.ZipInfo,
 		command.Lsar,
 		command.Unar,
 	}
-	const v = "--version"
 	flgs := [n]string{
 		"",
 		"",
 		"",
 		"-h",
-		v,
-		v,
+		"--version",
 		"",
 		"",
-		v,
 		"",
 		"-h",
-		"",
 		"-version",
 		"-version",
 	}

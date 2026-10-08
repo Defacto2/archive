@@ -209,13 +209,3 @@ Physical Size = 83888
 	files = zip7s([]byte(output3))
 	be.Equal(t, len(files), 0)
 }
-
-func Test_zipInfos(t *testing.T) {
-	t.Parallel()
-
-	input := []byte("file1.txt\r\nfile2.jpg\n\nsub/file3.go\r\n")
-	got := zipInfos(input)
-
-	want := []string{"file1.txt", "file2.jpg", "sub/file3.go"}
-	be.Equal(t, got, want)
-}
