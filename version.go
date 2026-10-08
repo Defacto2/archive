@@ -25,9 +25,25 @@ type ProgInfo struct {
 
 // Lookup the named program version and using an optional argument.
 // The output will be parsed and stored as a string to [ProgInfo.Output].
-func (pi *ProgInfo) Lookup(ctx context.Context, name, arg string) error {
+//
+// The progOutput is a func to parse the output bytes and return a version string.
+// The progOutput name should match the Lookup name and gets used to identify
+// where the version information is located.
+func (pi *ProgInfo) Lookup(ctx context.Context, name, arg string,
+	progOutput func(name string, b []byte) string,
+) error {
 	const format = "proginfo lookup: %s: %w"
 	prog := command.Bottle(name)
+
+	abs, err := exec.LookPath(prog)
+	if err != nil {
+		*pi = ProgInfo{ //nolint:exhaustruct_v5
+			Prog:   filepath.Base(prog),
+			Abs:    err.Error(),
+			Output: "",
+		}
+		return nil //nolint:nilerr
+	}
 
 	info, err := os.Lstat(prog)
 	if err != nil {
@@ -52,11 +68,6 @@ func (pi *ProgInfo) Lookup(ctx context.Context, name, arg string) error {
 	var exitError *exec.ExitError
 	if err != nil && !errors.As(err, &exitError) {
 		return fmt.Errorf(format, name, err)
-	}
-
-	abs, err := exec.LookPath(prog)
-	if err != nil {
-		abs = err.Error()
 	}
 
 	*pi = ProgInfo{
@@ -110,14 +121,14 @@ const n = 14 // n is the number of array objects used for ProgInfos
 
 // ProgInfos returns the program versions of the various commands
 // referenced by this archive package.
-func ProgInfos(ctx context.Context) ([n]ProgInfo, error) {
+func ProgInfos(ctx context.Context) [n]ProgInfo {
 	vers := [n]ProgInfo{}
 	cmds := [n]string{
 		command.Zip7,
 		command.Arc,
 		command.Arj,
 		command.BSDTar,
-		command.Cab,
+		command.Cab + "x",
 		command.Gzip,
 		command.HWZip,
 		command.Lha,
@@ -147,11 +158,11 @@ func ProgInfos(ctx context.Context) ([n]ProgInfo, error) {
 	}
 	for i, name := range cmds {
 		var inf ProgInfo
-		err := inf.Lookup(ctx, name, flgs[i])
+		err := inf.Lookup(ctx, name, flgs[i], progOutput)
 		if err != nil {
-			return vers, err
+			inf.Output += " " + err.Error()
 		}
 		vers[i] = inf
 	}
-	return vers, nil
+	return vers
 }
