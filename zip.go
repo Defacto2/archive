@@ -440,25 +440,3 @@ func (x Extractor) ZipUnzip(ctx context.Context, targets ...string) error {
 
 	return x.Run(ctx, file, prog, arg...)
 }
-
-// ZipHW extracts the content of the src ZIP archive using the [hwzip program].
-// The format is credited to Phil Katz.
-//
-// Modern unzip only supports the Deflate and Store compression methods.
-//
-// hwzip supports these legacy PKZIP formats that are not supported anymore:
-//   - Shrink
-//   - Reduce
-//   - Implode
-//
-// hwzip does not support targets, the extracting of individual files from a zip archive.
-//
-// Deprecated: [Extractor.Zip] handles Shrink, Reduce, Implode using the [archive/zip] package.
-//
-// [hwzip program]: https://www.hanshq.net/zip2.html
-func (x Extractor) ZipHW(ctx context.Context) error {
-	return x.Generic(ctx, Run{
-		Program: command.HWZip,
-		Extract: "extract",
-	})
-}

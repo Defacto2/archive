@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Defacto2/archive/pkzip"
 	"github.com/Defacto2/magicnumber"
 )
 
@@ -84,45 +83,6 @@ func (x Extractor) Run(ctx context.Context, file, prog string, arg ...string) er
 	return fmt.Errorf(format, file, "exec", err)
 }
 
-// Zips attempts to delegate the extraction of the source archive to the correct
-// zip decompression program on the file archive.
-//
-// Some filenames set by MS-DOS are not valid filenames on modern systems
-// due to the use of code-points that are not valid in Unicode.
-//
-// If the ZIP file uses a passphrase an error is returned.
-//
-// Deprecated: Use [Extractor.Zip] instead as it supports all ZIP methods.
-func (x Extractor) Zips(ctx context.Context, targets ...string) error {
-	const format = "archive zip extract %s %w"
-	_, err := pkzip.Methods(x.Source)
-	if errors.Is(err, pkzip.ErrPassParse) {
-		return fmt.Errorf(format, "password", err)
-	}
-
-	err = x.ZipUnzip(ctx, targets...)
-	if err == nil {
-		return nil
-	}
-
-	if len(targets) > 0 {
-		err = x.Unar(ctx, targets...)
-		if err != nil {
-			return fmt.Errorf(format, "all methods", err)
-		}
-		return nil
-	}
-
-	hErr := x.ZipHW(ctx)
-	if hErr != nil {
-		uErr := x.Unar(ctx)
-		if uErr != nil {
-			return fmt.Errorf(format, "all methods", err)
-		}
-	}
-	return nil
-}
-
 // lookup is used to determine the correct extraction method for the source archive.
 //
 // Compressed tarballs signatures are determined by the compression method, not the tarball format.
@@ -163,7 +123,7 @@ func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targe
 	case handleUnar:
 		return x.Unar(ctx, targets...)
 	case handleZips:
-		return x.Zips(ctx, targets...)
+		return x.Zip(ctx, targets...)
 	case handleZStandard:
 		return x.Zip7(ctx, targets...)
 	default:

@@ -548,7 +548,7 @@ func TestData_Extract_WithTargets(t *testing.T) {
 	}
 }
 
-func TestData_Extract_Zips(t *testing.T) {
+func TestData_Extract_Zip(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range Tests(t) {
@@ -565,13 +565,13 @@ func TestData_Extract_Zips(t *testing.T) {
 			err := archive.Extractor{
 				Source:      src,
 				Destination: tmp,
-			}.Zips(t.Context())
+			}.Zip(t.Context())
 			be.Err(t, err, nil)
 
 			err = archive.Extractor{
 				Source:      src,
 				Destination: tmp,
-			}.Zips(t.Context(), TestDat2, TestDat3)
+			}.Zip(t.Context(), TestDat2, TestDat3)
 			switch tt.Filename {
 			case TestShrink, TestReduce, TestImpode:
 				// skip these for now

@@ -19,7 +19,6 @@ const (
 	Arj    = "arj"    // Arj is the arj decompression command.
 	BSDTar = "bsdtar" // BSDTar is the tar decompression command.
 	Cab    = "gcab"   // Cab is the gcab decompression command for Microsoft Cabinet.
-	HWZip  = "hwzip"  // Deprecated: Hwzip the zip decompression command for files using obsolete methods.
 	Lha    = "lha"    // Lha is the lha/lzh decompression command.
 	Lsar   = "lsar"   // Lsar is The Unarchive list command usable on multiple types.
 	Unar   = "unar"   // Unar is The Unarchiver decompression command usable on multiple types.

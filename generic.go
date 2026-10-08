@@ -25,7 +25,7 @@ type Run struct {
 // If the targets are empty then all files are extracted.
 //
 // It is used for archive formats that are not widely supported
-// or have a limited feature set including ARC, HWZIP, and others.
+// or have a limited feature set including ARC, and others.
 //
 // These DOS era archive formats are not widely supported.
 // They also does not support extracting to a target directory.
