@@ -1,7 +1,11 @@
 // Package command lists the known archiving and decompression application names.
 package command
 
-import "time"
+import (
+	"os"
+	"path/filepath"
+	"time"
+)
 
 // A note about unrar: On Linux there are incompatible variants of unrar.
 // This package cannot use the common unrar-free application. It unfortunately, is
@@ -28,7 +32,38 @@ const (
 )
 
 const (
+	// HomeBrew is the default prefix path for Linux command overwrites.
+	HomeBrew = "/home/linuxbrew/.linuxbrew/bin"
+)
+
+const (
 	TimeoutList    = 2 * time.Second  // TimeoutList value in seconds for the command running in a background context.
 	TimeoutDefunct = 5 * time.Second  // TimeoutDefunct is the maximum time allowed for the defunct file extraction.
 	TimeoutExtract = 15 * time.Second // TimeoutExtract is the maximum time allowed for the archive extraction.
 )
+
+// Bottle is a workaround for the use of HomeBrew formula that are newer
+// than the programs or tools provided by the host operating system.
+// It checks the path and mode of the named command, and returns an
+// absolute path to the HomeBrew install for use with the Go exec package.
+// If there is no valid bottle, it returns the name string.
+//
+// For example, in 2026, Ubuntu 24 LTS uses old copies of lsar/unar
+// that cannot be upgraded, but have a extraction bug while dealing
+// with LHA/LZH archives. Bottle can provide a path to newer, fixed versions.
+func Bottle(name string) string {
+	prog := filepath.Join(HomeBrew, name)
+	info, err := os.Stat(prog)
+	if err != nil {
+		return name
+	}
+	mode := info.Mode()
+	if !mode.IsRegular() {
+		return name
+	}
+	const exeBit = 0o111
+	if ok := mode&exeBit != 0; !ok {
+		return name
+	}
+	return prog
+}

@@ -25,7 +25,8 @@ func (c *Content) Lsar(ctx context.Context, src string) error {
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutList)
 	defer cancel()
 
-	out, err := c.Run(ctx, src, command.Lsar, src, "-json")
+	prog := command.Bottle(command.Lsar)
+	out, err := c.Run(ctx, src, prog, src, "-json")
 	if err != nil {
 		return fmt.Errorf(format, "exec", err)
 	}
@@ -81,10 +82,12 @@ func lsars(data []byte) ([]string, error) {
 //   - unar command line tool: https://theunarchiver.com/command-line
 func (x Extractor) Unar(ctx context.Context, targets ...string) error {
 	const fmtext = "extract unar %w"
-	prog, err := exec.LookPath(command.Unar)
-	if err != nil {
-		return fmt.Errorf(fmtext, err)
-	}
+
+	prog := command.Bottle(command.Unar)
+	// prog, err := exec.LookPath(command.Unar)
+	// if err != nil {
+	// 	return fmt.Errorf(fmtext, err)
+	// }
 
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
