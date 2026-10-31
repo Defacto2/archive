@@ -3,7 +3,7 @@ module github.com/Defacto2/archive
 go 1.27.3
 
 require (
-	github.com/Defacto2/helper v1.7.4
+	github.com/Defacto2/helper v1.7.5
 	github.com/Defacto2/magicnumber v1.4.6
 	github.com/nalgeon/be v0.3.0
 )
