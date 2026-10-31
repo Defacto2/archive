@@ -9,6 +9,13 @@
 // This package was first prompted using Gemini in August 2026 and
 // manually cleaned to be idiomatic and readable.
 //
+// In October 2026, a major logic design issue was discovered and fixed.
+// The package failed to support sliding dictionaries and instead applied a fixed,
+// hard coded 4K dictionary. This issue went undetected as it was fine for binary data
+// and small text files. However, large dense raw text files being imploded using
+// pkzip, commonly applied a sliding dictionary and subsequently would be scrambled
+// upon being exploded using this package.
+//
 // In 2020, Jason Summers authored a collection of public domain libraries named [oldunzip].
 // In-depth [information] on Implode was authored by Hans Wennborg in 2021,
 // who programmed the public domain [implode.c].
@@ -21,6 +28,7 @@ package explode
 import (
 	"archive/zip"
 	"bufio"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -55,10 +63,16 @@ const (
 	countShift       = 4
 
 	byteMask = 0xFF
+
+	headSign    = 0x04034b50
+	headLen     = 30
+	maxFilename = 65_535
+	maxExtra    = 65_535
+	maxHeadBack = headLen + maxFilename + maxExtra
 )
 
 var (
-	ErrCorruptHeader = errors.New("explode: corrupt Shannon-Fano tree header")
+	ErrCorruptHeader = errors.New("explode: corrupt tree header")
 	ErrCorruptStream = errors.New("explode: corrupt compressed stream")
 )
 
@@ -96,10 +110,75 @@ func dcomp(r io.Reader) io.ReadCloser {
 	return newReader(r, 0, 0)
 }
 
+func findFlags(r io.Reader) (int, int, bool) {
+	sr, ok := any(r).(interface {
+		Outer() (io.ReaderAt, int64, int64)
+	})
+	if !ok {
+		return 0, 0, false
+	}
+	outer, off, _ := sr.Outer()
+	if outer == nil || off < headLen {
+		return 0, 0, false
+	}
+
+	size := min(off, maxHeadBack)
+	buf := make([]byte, size)
+	start := off - size
+	n, err := outer.ReadAt(buf, start)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return 0, 0, false
+	}
+	buf = buf[:n]
+
+	for i := len(buf) - headLen; i >= 0; i-- {
+		sig := binary.LittleEndian.Uint32(buf[i : i+4])
+		if sig != headSign {
+			continue
+		}
+		fname := int64(binary.LittleEndian.Uint16(buf[i+26 : i+28]))
+		extra := int64(binary.LittleEndian.Uint16(buf[i+28 : i+30]))
+		offset := start + int64(i)
+		if offset+headLen+fname+extra == off {
+			flags := binary.LittleEndian.Uint16(buf[i+6 : i+8])
+			dictSize := dictionary4K
+			if flags&2 != 0 {
+				dictSize = maxDictSize
+			}
+			treeCount := twoTrees
+			if flags&4 != 0 {
+				treeCount = threeTrees
+			}
+			return dictSize, treeCount, true
+		}
+	}
+
+	return 0, 0, false
+}
+
+func zipFlags(r io.Reader, size, trees int) (int, int) {
+	if size > 0 && trees > 0 {
+		return size, trees
+	}
+	d, t, ok := findFlags(r)
+	if !ok {
+		return size, trees
+	}
+	if size <= 0 {
+		size = d
+	}
+	if trees <= 0 {
+		trees = t
+	}
+	return size, trees
+}
+
 // newReader returns an [io.ReadCloser] that decompresses method 6 (Implode/Explode) streams.
 // If the provided dictionary size is 0, it defaults to 4096 (4K).
 // If the number of trees is 0, it is auto-detected from the stream.
 func newReader(r io.Reader, size, trees int) io.ReadCloser {
+	size, trees = zipFlags(r, size, trees)
+
 	br, ok := r.(io.ByteReader)
 	if !ok {
 		br = bufio.NewReader(r)
