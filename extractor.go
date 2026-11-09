@@ -40,7 +40,7 @@ type Extractor struct {
 //   - Bzip2
 //   - Microsoft CAB
 func (x Extractor) Extract(ctx context.Context, targets ...string) (err error) {
-	const format = "extractor extract %s %w"
+	const format = "extractor extract %s: %w"
 	file, err := os.Open(x.Source)
 	if err != nil {
 		return fmt.Errorf(format, "open", err)
@@ -58,29 +58,40 @@ func (x Extractor) Extract(ctx context.Context, targets ...string) (err error) {
 		return fmt.Errorf(format, "magic", err)
 	}
 
-	return x.lookup(ctx, sign, targets...)
+	lErr := x.lookup(ctx, sign, targets...)
+	if lErr != nil {
+		return fmt.Errorf(format, "lookup", lErr)
+	}
+	return nil
 }
 
 // Run executes an extraction command, capturing stderr and context timeouts.
 func (x Extractor) Run(ctx context.Context, file, prog string, arg ...string) error {
 	cmd := exec.CommandContext(ctx, prog, arg...)
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
 
 	err := cmd.Run()
 	if err == nil {
 		return nil
 	}
-	const format = "run %s extractor %s %w"
+	const format = "run %s extractor %s: %w"
 	if ctx.Err() != nil {
 		return fmt.Errorf(format, file, "timeout", ctx.Err())
 	}
 
-	stderrStr := strings.TrimSpace(stderrBuf.String())
+	stderrStr := strings.TrimSpace(stderr.String())
 	if stderrStr != "" {
-		return fmt.Errorf(format, file, "exec "+stderrStr, err)
+		return fmt.Errorf(format, file, "exec with debug: "+stderrStr, err)
 	}
-	return fmt.Errorf(format, file, "exec", err)
+	stdoutStr := strings.TrimSpace(stdout.String())
+	if stdoutStr != "" {
+		return fmt.Errorf(format, file, "exec with feedback: '"+stdoutStr+"'", err)
+	}
+	return fmt.Errorf(format, file, "exec without debug", err)
 }
 
 // lookup is used to determine the correct extraction method for the source archive.

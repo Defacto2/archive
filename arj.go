@@ -127,7 +127,7 @@ func notArj(output []byte) bool {
 //
 // [arj program]: https://arj.sourceforge.net/
 func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
-	const format = "extract arj %s %w"
+	const format = "extract arj %s: %w"
 
 	src, dst := x.Source, x.Destination
 	if dst == "" {
@@ -168,6 +168,7 @@ func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
 		extract   = "x"   // x extract files
 		yes       = "-y"  // -y assume yes to all queries
 		targetDir = "-ht" // -ht target directory
+		skipHeadr = "-hy" // edge case fix for ARJ32 archives
 	)
 
 	const size = 4
@@ -176,5 +177,18 @@ func (x Extractor) ARJ(ctx context.Context, targets ...string) error {
 	arg = append(arg, targets...)
 	arg = append(arg, targetDir+dst)
 
+	const substr = "Requires ARJ32 or -hy option"
+	aErr := x.Run(ctx, "arj", prog, arg...)
+	if aErr == nil {
+		return nil
+	}
+	if s := aErr.Error(); !strings.Contains(s, substr) {
+		return aErr
+	}
+	// try again using the -hy flag to fix this annoying situation
+	arg = make([]string, 0, size+1+len(targets))
+	arg = append(arg, extract, yes, newname, skipHeadr)
+	arg = append(arg, targets...)
+	arg = append(arg, targetDir+dst)
 	return x.Run(ctx, "arj", prog, arg...)
 }
