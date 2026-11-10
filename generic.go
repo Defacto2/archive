@@ -14,6 +14,8 @@ import (
 	"github.com/Defacto2/helper"
 )
 
+var ErrNoFeedback = errors.New("command failed but it gave no feedback")
+
 // Run holds the program and extract command for use with the generic extractor.
 type Run struct {
 	Program string // Program is the archiver program to run, but not the full path.
@@ -46,13 +48,13 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) (err
 	name := run.Program
 	prog, pErr := exec.LookPath(run.Program)
 	if pErr != nil {
-		return fmt.Errorf(format+" %s extract %w", name, pErr)
+		return fmt.Errorf(format+" %s extract: %w", name, pErr)
 	}
 
 	srcInDst := filepath.Join(dst, filepath.Base(src))
 	_, dErr := helper.Duplicate(src, srcInDst)
 	if dErr != nil {
-		return fmt.Errorf(format+" %s duplicate %w", name, dErr)
+		return fmt.Errorf(format+" %s duplicate: %w", name, dErr)
 	}
 	defer func() {
 		cErr := os.Remove(srcInDst)
@@ -70,18 +72,26 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) (err
 	args[1] = filepath.Base(src)
 	args = append(args, targets...)
 
-	var buf bytes.Buffer
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
 	cmd := exec.CommandContext(ctx, prog, args...)
 	cmd.Dir = dst
-	cmd.Stderr = &buf
+	cmd.Stderr = &stderr
+	cmd.Stdout = &stdout
 	rErr := cmd.Run()
-	if rErr != nil {
-		if buf.String() != "" {
-			return fmt.Errorf(format+" %s %w: %s: '%s'", name,
-				ErrProg, prog, strings.TrimSpace(buf.String()))
-		}
-		return fmt.Errorf(format+" %s %w: %s", name, err, prog)
+	if rErr == nil {
+		return nil
 	}
 
-	return nil
+	s := strings.TrimSpace(stderr.String())
+	if s != "" {
+		return fmt.Errorf(format+" %s %w: %s with debug: '%s'",
+			name, ErrProg, prog, s)
+	}
+	s = strings.TrimSpace(stdout.String())
+	if s != "" {
+		return fmt.Errorf(format+" %s %w: %s with output: '%s'",
+			name, ErrProg, prog, s)
+	}
+	return fmt.Errorf(format+" %s %w: %s", name, ErrNoFeedback, prog)
 }
