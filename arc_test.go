@@ -71,6 +71,16 @@ func TestArcExtractor(t *testing.T) {
 				be.Err(t, err, nil)
 			}
 			testingXTexts(t, x.Destination)
+
+			// Running ARC extraction a second time into the same destination
+			// should overwrite without hanging or erroring.
+			err = x.ARC(t.Context())
+			if tt.wantErr {
+				be.Err(t, err)
+			} else {
+				be.Err(t, err, nil)
+			}
+			testingXTexts(t, x.Destination)
 		})
 	}
 }

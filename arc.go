@@ -119,6 +119,6 @@ func notArc(output []byte) bool {
 func (x Extractor) ARC(ctx context.Context, targets ...string) error {
 	return x.Generic(ctx, Run{
 		Program: command.Arc,
-		Extract: "x",
+		Extract: "xo", // WARN: the o flag must be provided or the janky arc command can cause a stdin loop
 	}, targets...)
 }
