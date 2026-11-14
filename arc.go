@@ -7,17 +7,28 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/Defacto2/archive/arc"
 	"github.com/Defacto2/archive/command"
 )
 
 // Package file arc.go contains the ARC archive compression methods.
 
 // ARC returns the content of the src ARC archive.
-// The format once credited to System Enhancement Associates,
-// but now using the [arc program] by Howard Chu.
+// It first attempts native Go extraction and falls back to Howard Chu's [arc program].
 //
 // [arc program]: https://github.com/hyc/arc
 func (c *Content) ARC(ctx context.Context, src string) error {
+	r, f, err := arc.OpenReader(src)
+	if err == nil {
+		defer f.Close()
+		c.Files = make([]string, len(r.Files))
+		for i, entry := range r.Files {
+			c.Files[i] = entry.Name
+		}
+		c.Ext = arcx
+		return nil
+	}
+
 	const format = "context arc %s %w"
 	prog, err := exec.LookPath(command.Arc)
 	if err != nil {
@@ -111,12 +122,20 @@ func notArc(output []byte) bool {
 }
 
 // ARC extracts the content of the ARC archive.
-// The format once credited to System Enhancement Associates,
-// but now using the [arc program] by Howard Chu.
+// It first attempts native Go extraction and falls back to Howard Chu's [arc program].
 // If the targets are empty then all files are extracted.
 //
 // [arc program]: https://github.com/hyc/arc
 func (x Extractor) ARC(ctx context.Context, targets ...string) error {
+	r, f, err := arc.OpenReader(x.Source)
+	if err == nil {
+		defer f.Close()
+		extErr := r.ExtractAll(x.Destination, targets...)
+		if extErr == nil {
+			return nil
+		}
+	}
+
 	return x.Generic(ctx, Run{
 		Program: command.Arc,
 		Extract: "xo", // WARN: the o flag must be provided or the janky arc command can cause a stdin loop
