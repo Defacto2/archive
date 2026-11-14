@@ -12,6 +12,10 @@ const (
 	TestLZH1 = "LH0.LZH"
 	TestLZH2 = "LH113.LZH"
 	TestLZH3 = "LH5.LZH"
+	TestLZH4 = "LH4.LZH"
+	TestLZH6 = "LH6.LZH"
+	TestLZH7 = "LH7.LZH"
+	TestLZS5 = "LZ5.LZH"
 )
 
 func TestLhaContent(t *testing.T) {
@@ -24,6 +28,10 @@ func TestLhaContent(t *testing.T) {
 		{TestLZH1, false},
 		{TestLZH2, false},
 		{TestLZH3, false},
+		{TestLZH4, false},
+		{TestLZH6, false},
+		{TestLZH7, false},
+		{TestLZS5, false},
 	}
 
 	for _, tt := range tests {
@@ -59,6 +67,10 @@ func TestLhaExtractor(t *testing.T) {
 		{TestLZH1, false},
 		{TestLZH2, false},
 		{TestLZH3, false},
+		{TestLZH4, false},
+		{TestLZH6, false},
+		{TestLZH7, false},
+		{TestLZS5, false},
 	}
 
 	for _, tt := range tests {

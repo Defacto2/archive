@@ -18,6 +18,7 @@ const (
 	arcSque   = "ARC_SQUE.ARC"
 	arcCru5   = "ARC_CRU5.ARC"
 	arcCru6   = "ARC_CRU6.ARC"
+	arcCru7   = "ARC_CRU7.ARC"
 	arcSquash = "ARC_SQUA.ARC"
 )
 
@@ -70,6 +71,7 @@ func TestMethods(t *testing.T) {
 		{"Squeezed (Method 4)", arcSque, arc.MethodSqueezed, 1},
 		{"Old Crunched (Method 5)", arcCru5, arc.MethodCrunched5, 1},
 		{"Old Crunched RLE (Method 6)", arcCru6, arc.MethodCrunched6, 1},
+		{"Crunched New Hash (Method 7)", arcCru7, arc.MethodCrunched7, 1},
 		{"Crunched (Method 8)", arc601, arc.MethodCrunched8, 3},
 		{"Squashed (Method 9)", arcSquash, arc.MethodSquashed, 3},
 	}
