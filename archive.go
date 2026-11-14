@@ -122,6 +122,7 @@ var signHandlers = map[magicnumber.Signature]handler{
 	magicnumber.LibraryUtility:       handleLbr,
 	magicnumber.YoshiLHA:             handleLha,
 	magicnumber.RoshalARchive:        handleRar,
+	magicnumber.RoshalARchive93:      handleUnar,
 	magicnumber.RoshalARchivev5:      handleRar,
 	magicnumber.TapeARchive:          handleTar,
 	magicnumber.NoGatePAK:            handleUnar,
