@@ -8,10 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/Defacto2/archive/command"
-	"github.com/Defacto2/helper"
 )
 
 var ErrNoFeedback = errors.New("command failed but it gave no feedback")
@@ -27,15 +25,12 @@ type Run struct {
 // If the targets are empty then all files are extracted.
 //
 // It is used for archive formats that are not widely supported
-// or have a limited feature set including ARC, and others.
+// or have a limited feature set including ARC, CAB, and others.
 //
-// These DOS era archive formats are not widely supported.
-// They also does not support extracting to a target directory.
-// To work around this, Generic copies the source archive
-// to the destination directory, uses that as the working directory
-// and extracts the files. The copied source archive is then removed.
-func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) (err error) {
-	const format = "generic archive"
+// These DOS-era archive formats do not support a destination directory flag.
+// Generic works around this by setting the command working directory
+// to the destination directory and passing the absolute path to the source archive.
+func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) error {
 	src, dst := x.Source, x.Destination
 	inf, sErr := os.Stat(dst)
 	if sErr != nil {
@@ -48,28 +43,20 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) (err
 	name := run.Program
 	prog, pErr := exec.LookPath(run.Program)
 	if pErr != nil {
-		return fmt.Errorf(format+" %s extract: %w", name, pErr)
+		return fmt.Errorf("generic archive %s extract: %w", name, pErr)
 	}
 
-	srcInDst := filepath.Join(dst, filepath.Base(src))
-	_, dErr := helper.Duplicate(src, srcInDst)
-	if dErr != nil {
-		return fmt.Errorf(format+" %s duplicate: %w", name, dErr)
+	absSrc, aErr := filepath.Abs(src)
+	if aErr != nil {
+		return fmt.Errorf("generic archive %s abs: %w", name, aErr)
 	}
-	defer func() {
-		cErr := os.Remove(srcInDst)
-		if cErr != nil {
-			err = errors.Join(err, fmt.Errorf(format+" %w", cErr))
-		}
-	}()
 
 	ctx, cancel := context.WithTimeout(ctx, command.TimeoutDefunct)
 	defer cancel()
 
 	const size = 2
-	args := make([]string, size, size+len(targets))
-	args[0] = run.Extract
-	args[1] = filepath.Base(src)
+	args := make([]string, 0, size+len(targets))
+	args = append(args, run.Extract, absSrc)
 	args = append(args, targets...)
 
 	var stderr bytes.Buffer
@@ -83,15 +70,22 @@ func (x Extractor) Generic(ctx context.Context, run Run, targets ...string) (err
 		return nil
 	}
 
-	s := strings.TrimSpace(stderr.String())
-	if s != "" {
-		return fmt.Errorf(format+" %s %w: %s with debug: '%s'",
+	if s := truncate(stderr.Bytes()); s != "" {
+		return fmt.Errorf("generic archive %s %w: %s with debug: '%s'",
 			name, ErrProg, prog, s)
 	}
-	s = strings.TrimSpace(stdout.String())
-	if s != "" {
-		return fmt.Errorf(format+" %s %w: %s with output: '%s'",
+	if s := truncate(stdout.Bytes()); s != "" {
+		return fmt.Errorf("generic archive %s %w: %s with output: '%s'",
 			name, ErrProg, prog, s)
 	}
-	return fmt.Errorf(format+" %s %w: %s", name, ErrNoFeedback, prog)
+	return fmt.Errorf("generic archive %s %w: %s", name, ErrNoFeedback, prog)
+}
+
+func truncate(b []byte) string {
+	const limit = 1000
+	b = bytes.TrimSpace(b)
+	if len(b) > limit {
+		return string(b[:limit]) + "... (truncated)"
+	}
+	return string(b)
 }
