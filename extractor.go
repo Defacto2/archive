@@ -1,4 +1,4 @@
-//nolint:cyclop
+//nolint:gochecknoglobals
 package archive
 
 import (
@@ -98,46 +98,34 @@ func (x Extractor) Run(ctx context.Context, file, prog string, arg ...string) er
 //
 // Compressed tarballs signatures are determined by the compression method, not the tarball format.
 // For example, a file.tar.gz signature is a gzip compressed file, not a tarball.
+type extractorFunc func(Extractor, context.Context, ...string) error
+
+var extractors = map[handler]extractorFunc{
+	handleAppleSilicon: Extractor.Unar,
+	handle7zip:         Extractor.Zip7,
+	handleArc:          Extractor.ARC,
+	handleArj:          Extractor.ARJ,
+	handleBSDTar:       Extractor.BSDTar,
+	handleBz2:          func(x Extractor, ctx context.Context, _ ...string) error { return x.Bz2(ctx) },
+	handleCab:          func(x Extractor, ctx context.Context, _ ...string) error { return x.Cab(ctx) },
+	handleGzip:         Extractor.Gzip,
+	handleLbr:          Extractor.LBR,
+	handleLha:          Extractor.Unar,
+	handleRar:          Extractor.Rar,
+	handleTar:          Extractor.Tar,
+	handleTarballBz2:   Extractor.BSDTar,
+	handleTarballGz:    Extractor.Gzip,
+	handleTarballXz:    Extractor.BSDTar,
+	handleTarballZst:   Extractor.BSDTar,
+	handleUnar:         Extractor.Unar,
+	handleZips:         Extractor.Zip,
+	handleZStandard:    Extractor.Zip7,
+}
+
 func (x Extractor) lookup(ctx context.Context, sign magicnumber.Signature, targets ...string) error {
-	filename := filepath.Base(x.Source)
-	switch handles(sign, filename) { //nolint:exhaustive
-	case handleAppleSilicon:
-		return x.Unar(ctx, targets...)
-	case handle7zip:
-		return x.Zip7(ctx, targets...)
-	case handleArc:
-		return x.ARC(ctx, targets...)
-	case handleArj:
-		return x.ARJ(ctx, targets...)
-	case handleBSDTar:
-		return x.BSDTar(ctx, targets...)
-	case handleBz2:
-		return x.Bz2(ctx)
-	case handleCab:
-		return x.Cab(ctx)
-	case handleGzip:
-		return x.Gzip(ctx, targets...)
-	case handleLha:
-		return x.Unar(ctx, targets...)
-	case handleRar:
-		return x.Rar(ctx, targets...)
-	case handleTar:
-		return x.Tar(ctx, targets...)
-	case handleTarballBz2:
-		return x.BSDTar(ctx, targets...)
-	case handleTarballGz:
-		return x.Gzip(ctx, targets...)
-	case handleTarballXz:
-		return x.BSDTar(ctx, targets...)
-	case handleTarballZst:
-		return x.BSDTar(ctx, targets...)
-	case handleUnar:
-		return x.Unar(ctx, targets...)
-	case handleZips:
-		return x.Zip(ctx, targets...)
-	case handleZStandard:
-		return x.Zip7(ctx, targets...)
-	default:
-		return handleUnknown(sign)
+	h := handles(sign, filepath.Base(x.Source))
+	if fn, ok := extractors[h]; ok {
+		return fn(x, ctx, targets...)
 	}
+	return handleUnknown(sign)
 }

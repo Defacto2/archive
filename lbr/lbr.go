@@ -1,0 +1,322 @@
+// Package lbr provides native reading and extraction for CP/M and MS-DOS Library Utility (.LBR) archives.
+//
+//nolint:gosmopolitan
+package lbr
+
+import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+const (
+	sectorSize = 128 // LBR fixed sector size in bytes
+	entrySize  = 32  // LBR directory entry size in bytes
+
+	statusActive  byte = 0x00 // Active directory entry
+	statusDeleted byte = 0xFE // Deleted directory entry
+	statusUnused  byte = 0xFF // Unused entry (end of directory)
+)
+
+var (
+	ErrCRCMismatch = errors.New("crc-16 mismatch")
+	ErrFormat      = errors.New("not a valid lbr archive")
+)
+
+// Header represents a file header inside an LBR archive.
+type Header struct {
+	Name     string
+	Size     int64
+	Sectors  uint16
+	Pad      byte
+	CRC      uint16
+	Modified time.Time
+}
+
+// File represents a file entry within an LBR archive.
+type File struct {
+	Header
+
+	offset int64
+	r      io.ReaderAt
+}
+
+// Open returns a ReadCloser that provides access to the uncompressed file contents.
+func (f *File) Open() (io.ReadCloser, error) {
+	sr := io.NewSectionReader(f.r, f.offset, f.Size)
+	if f.CRC == 0 {
+		return io.NopCloser(sr), nil
+	}
+
+	b, err := io.ReadAll(sr)
+	if err != nil {
+		return nil, fmt.Errorf("lbr file open read: %w", err)
+	}
+	if calc := CRC16(b); calc != f.CRC {
+		return nil, fmt.Errorf("expected 0x%04X, got 0x%04X: %w", f.CRC, calc, ErrCRCMismatch)
+	}
+
+	return io.NopCloser(bytes.NewReader(b)), nil
+}
+
+// Reader provides read access to the entries of an LBR archive.
+type Reader struct {
+	Files []*File
+	r     io.ReaderAt
+}
+
+// NewReader returns a new Reader reading from r, which must have the given size.
+func NewReader(r io.ReaderAt, size int64) (*Reader, error) {
+	if size < sectorSize {
+		return nil, ErrFormat
+	}
+
+	var root [entrySize]byte
+	_, err := r.ReadAt(root[:], 0)
+	if err != nil {
+		return nil, fmt.Errorf("lbr new reader read root: %w", err)
+	}
+
+	dirSectors, ok := validateRoot(root[:], size)
+	if !ok {
+		return nil, ErrFormat
+	}
+
+	dirBytes := make([]byte, int(dirSectors)*sectorSize)
+	_, err = r.ReadAt(dirBytes, 0)
+	if err != nil {
+		return nil, fmt.Errorf("lbr new reader read directory: %w", err)
+	}
+
+	maxEntries := int(dirSectors) * (sectorSize / entrySize)
+	files := make([]*File, 0, maxEntries-1)
+
+	for i := 1; i < maxEntries; i++ {
+		entry := dirBytes[i*entrySize : (i+1)*entrySize]
+		status := entry[0]
+		if status == statusUnused {
+			break
+		}
+		if status == statusDeleted || status != statusActive {
+			continue
+		}
+
+		file, err := parseEntry(r, entry, size)
+		if err != nil {
+			return nil, err
+		}
+		if file != nil {
+			files = append(files, file)
+		}
+	}
+
+	if len(files) == 0 {
+		return nil, ErrFormat
+	}
+
+	return &Reader{
+		Files: files,
+		r:     r,
+	}, nil
+}
+
+func validateRoot(entry []byte, totalSize int64) (uint16, bool) {
+	if entry[0] != statusActive {
+		return 0, false
+	}
+	index := binary.LittleEndian.Uint16(entry[12:14])
+	if index != 0 {
+		return 0, false
+	}
+	sectors := binary.LittleEndian.Uint16(entry[14:16])
+	if sectors == 0 || int64(sectors)*sectorSize > totalSize {
+		return 0, false
+	}
+	return sectors, true
+}
+
+func parseEntry(r io.ReaderAt, entry []byte, totalSize int64) (*File, error) {
+	name := parseEntryName(entry[1:9], entry[9:12])
+	if name == "" {
+		return nil, nil //nolint:nilnil
+	}
+
+	index := binary.LittleEndian.Uint16(entry[12:14])
+	sectors := binary.LittleEndian.Uint16(entry[14:16])
+	crc := binary.LittleEndian.Uint16(entry[16:18])
+	pad := entry[26]
+
+	if pad >= sectorSize {
+		return nil, fmt.Errorf("invalid pad count %d: %w", pad, ErrFormat)
+	}
+
+	offset := int64(index) * sectorSize
+	rawSize := int64(sectors) * sectorSize
+	if offset+rawSize > totalSize {
+		return nil, fmt.Errorf("entry %s exceeds archive bounds: %w", name, ErrFormat)
+	}
+
+	fileSize := rawSize - int64(pad)
+	if sectors == 0 {
+		fileSize = 0
+	}
+
+	dateVal := binary.LittleEndian.Uint16(entry[22:24])
+	timeVal := binary.LittleEndian.Uint16(entry[24:26])
+	if dateVal == 0 {
+		dateVal = binary.LittleEndian.Uint16(entry[18:20])
+		timeVal = binary.LittleEndian.Uint16(entry[20:22])
+	}
+
+	return &File{
+		Name:     name,
+		Size:     fileSize,
+		Sectors:  sectors,
+		Pad:      pad,
+		CRC:      crc,
+		Modified: parseCPMTime(dateVal, timeVal),
+		offset:   offset,
+		r:        r,
+	}, nil
+}
+
+func parseEntryName(nameBytes, extBytes []byte) string {
+	name := strings.TrimSpace(string(nameBytes))
+	ext := strings.TrimSpace(string(extBytes))
+	if name == "" && ext == "" {
+		return ""
+	}
+	if ext == "" {
+		return name
+	}
+	return name + "." + ext
+}
+
+// OpenReader opens the named LBR file and returns a Reader.
+func OpenReader(name string) (*Reader, *os.File, error) {
+	const format = "lbr open reader: %w"
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, nil, fmt.Errorf(format, err)
+	}
+	st, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, fmt.Errorf(format, err)
+	}
+	r, err := NewReader(f, st.Size())
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, fmt.Errorf(format, err)
+	}
+	return r, f, nil
+}
+
+// ExtractAll extracts all files from the LBR archive to dst directory.
+// If targets are provided, only matching filenames (case-insensitive) are extracted.
+func (r *Reader) ExtractAll(dst string, targets ...string) error {
+	const format = "lbr extract all %s: %w"
+	root, err := os.OpenRoot(dst)
+	if err != nil {
+		return fmt.Errorf(format, "open root", err)
+	}
+	defer root.Close()
+
+	targetMap := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		targetMap[strings.ToLower(filepath.Base(t))] = true
+	}
+
+	for _, entry := range r.Files {
+		if len(targetMap) > 0 && !targetMap[strings.ToLower(entry.Name)] {
+			continue
+		}
+		err := extractEntry(root, dst, entry)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func extractEntry(root *os.Root, dst string, entry *File) error {
+	const format = "lbr extract %s: %w"
+	rc, err := entry.Open()
+	if err != nil {
+		return fmt.Errorf(format, "open entry", err)
+	}
+	defer rc.Close()
+
+	cleanName := filepath.Base(entry.Name)
+	const mode = 0o644
+	out, err := root.OpenFile(cleanName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf(format, "create file", err)
+	}
+
+	_, copyErr := io.Copy(out, rc)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return fmt.Errorf(format, "write file", copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf(format, "close file", closeErr)
+	}
+
+	if !entry.Modified.IsZero() {
+		_ = os.Chtimes(filepath.Join(dst, cleanName), entry.Modified, entry.Modified)
+	}
+	return nil
+}
+
+// parseCPMTime decodes a LUDEF5 CP/M epoch date and packed time.
+// Unusually, the epoch date is the number of days since Dec 31, 1977.
+func parseCPMTime(dateVal, timeVal uint16) time.Time {
+	if dateVal == 0 {
+		return time.Time{}
+	}
+
+	const (
+		hourShift = 11
+		hourMask  = 0x1f
+		minShift  = 5
+		minMask   = 0x3f
+		secMask   = 0x1f
+		secStep   = 2
+	)
+
+	// Day 1 = January 1, 1978
+	base := time.Date(1977, time.December, 31, 0, 0, 0, 0, time.Local)
+	d := base.AddDate(0, 0, int(dateVal))
+
+	hr := int((timeVal >> hourShift) & hourMask)
+	mn := int((timeVal >> minShift) & minMask)
+	sc := int((timeVal & secMask) * secStep)
+
+	return time.Date(d.Year(), d.Month(), d.Day(), hr, mn, sc, 0, time.Local)
+}
+
+// CRC16 calculates the CCITT/XMODEM CRC-16 checksum used by LUDEF5 archives.
+func CRC16(data []byte) uint16 {
+	const poly = 0x1021
+	const mask = 0x8000
+	const shift = 8
+	var crc uint16
+	for _, b := range data {
+		crc ^= uint16(b) << shift
+		for range 8 {
+			if (crc & mask) != 0 {
+				crc = (crc << 1) ^ poly
+			} else {
+				crc <<= 1
+			}
+		}
+	}
+	return crc
+}

@@ -91,46 +91,33 @@ func (c *Content) Run(ctx context.Context, file, prog string, arg ...string) ([]
 	return nil, fmt.Errorf(format, "exec", file, err)
 }
 
-func (c *Content) read(ctx context.Context, sign magicnumber.Signature, src string) error { //nolint:cyclop
-	filename := filepath.Base(src)
-	switch handles(sign, filename) { //nolint:exhaustive
-	case handleAppleSilicon:
-		return c.Lsar(ctx, src)
-	case handle7zip:
-		return c.Zip7(ctx, src)
-	case handleArc:
-		return c.ARC(ctx, src)
-	case handleArj:
-		return c.ARJ(ctx, src)
-	case handleBSDTar:
-		return c.Lsar(ctx, src)
-	case handleBz2:
-		return c.Bz2(ctx, src)
-	case handleCab:
-		return c.Cab(ctx, src)
-	case handleGzip:
-		return c.Gzip(ctx, src)
-	case handleLha:
-		return c.LHA(ctx, src)
-	case handleRar:
-		return c.Rar(ctx, src)
-	case handleTar:
-		return c.Tar(ctx, src)
-	case handleTarballBz2:
-		return c.Bz2Tar(ctx, src)
-	case handleTarballGz:
-		return c.GzipTar(ctx, src)
-	case handleTarballXz:
-		return c.Lsar(ctx, src)
-	case handleTarballZst:
-		return c.BSDTar(ctx, src)
-	case handleUnar:
-		return c.Lsar(ctx, src)
-	case handleZips:
-		return c.Zip(ctx, src)
-	case handleZStandard: // listing the content of zst files is not supported
-		return handleUnknown(sign)
-	default:
-		return handleUnknown(sign)
+type contentReader func(*Content, context.Context, string) error
+
+var contentReaders = map[handler]contentReader{ //nolint:gochecknoglobals
+	handleAppleSilicon: (*Content).Lsar,
+	handle7zip:         (*Content).Zip7,
+	handleArc:          (*Content).ARC,
+	handleArj:          (*Content).ARJ,
+	handleBSDTar:       (*Content).Lsar,
+	handleBz2:          (*Content).Bz2,
+	handleCab:          (*Content).Cab,
+	handleGzip:         (*Content).Gzip,
+	handleLbr:          (*Content).LBR,
+	handleLha:          (*Content).LHA,
+	handleRar:          (*Content).Rar,
+	handleTar:          (*Content).Tar,
+	handleTarballBz2:   (*Content).Bz2Tar,
+	handleTarballGz:    (*Content).GzipTar,
+	handleTarballXz:    (*Content).Lsar,
+	handleTarballZst:   (*Content).BSDTar,
+	handleUnar:         (*Content).Lsar,
+	handleZips:         (*Content).Zip,
+}
+
+func (c *Content) read(ctx context.Context, sign magicnumber.Signature, src string) error {
+	h := handles(sign, filepath.Base(src))
+	if fn, ok := contentReaders[h]; ok {
+		return fn(c, ctx, src)
 	}
+	return handleUnknown(sign)
 }

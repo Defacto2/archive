@@ -23,7 +23,7 @@
 // [unrar]: https://www.rarlab.com/rar_add.htm
 // [unrar-free]: https://gitlab.com/bgermann/unrar-free
 //
-//nolint:cyclop,nonamedreturns
+//nolint:nonamedreturns,gochecknoglobals
 package archive
 
 // More details on Linux decompression programs:
@@ -60,6 +60,7 @@ const (
 	bz2x  = ".bz2" // Bzip2 by Julian Seward
 	cabx  = ".cab" // Microsoft Cabinet by Microsoft
 	gzipx = ".gz"  // GNU Zip by Jean-loup Gailly and Mark Adler
+	lbrx  = ".lbr" // Library Utility by Gary P. Novosielski
 	lhax  = ".lha" // LHarc by Haruyasu Yoshizaki (Yoshi)
 	lhzx  = ".lzh" // LHArc by Haruyasu Yoshizaki (Yoshi)
 	pakx  = ".pak" // PAK by NoGate Associates
@@ -98,6 +99,7 @@ const (
 	handleBz2
 	handleCab
 	handleGzip
+	handleLbr
 	handleLha
 	handleRar
 	handleTar
@@ -110,51 +112,37 @@ const (
 	handleZStandard
 )
 
-func handles(sign magicnumber.Signature, filename string) handler { //nolint:cyclop
-	if ok := handleMacOS(sign); ok {
+var signHandlers = map[magicnumber.Signature]handler{
+	magicnumber.X7zCompressArchive:   handle7zip,
+	magicnumber.ARChiveSEA:           handleArc,
+	magicnumber.ArchiveRobertJung:    handleArj,
+	magicnumber.Bzip2CompressArchive: handleBz2,
+	magicnumber.MicrosoftCABinet:     handleCab,
+	magicnumber.GzipCompressArchive:  handleGzip,
+	magicnumber.LibraryUtility:       handleLbr,
+	magicnumber.YoshiLHA:             handleLha,
+	magicnumber.RoshalARchive:        handleRar,
+	magicnumber.RoshalARchivev5:      handleRar,
+	magicnumber.TapeARchive:          handleTar,
+	magicnumber.NoGatePAK:            handleUnar,
+	magicnumber.XZCompressArchive:    handleUnar,
+	magicnumber.PKWAREZip:            handleZips,
+	magicnumber.PKWAREZip64:          handleZips,
+	magicnumber.PKWAREZipImplode:     handleZips,
+	magicnumber.PKWAREZipReduce:      handleZips,
+	magicnumber.PKWAREZipShrink:      handleZips,
+	magicnumber.ZStandardArchive:     handleZStandard,
+}
+
+func handles(sign magicnumber.Signature, filename string) handler {
+	if handleMacOS(sign) {
 		return handleAppleSilicon
 	}
 	// handle known tarballs first, otherwise they won't get fully decompressed
 	if tarball := handleTarball(sign, filename); tarball != handleNone {
 		return tarball
 	}
-	switch sign { //nolint:exhaustive
-	case magicnumber.X7zCompressArchive:
-		return handle7zip
-	case magicnumber.ARChiveSEA:
-		return handleArc
-	case magicnumber.ArchiveRobertJung:
-		return handleArj
-	case magicnumber.Bzip2CompressArchive:
-		return handleBz2
-	case magicnumber.MicrosoftCABinet:
-		return handleCab
-	case magicnumber.GzipCompressArchive:
-		return handleGzip
-	case magicnumber.YoshiLHA:
-		return handleLha
-	case
-		magicnumber.RoshalARchive,
-		magicnumber.RoshalARchivev5:
-		return handleRar
-	case magicnumber.TapeARchive:
-		return handleTar
-	case
-		magicnumber.NoGatePAK,
-		magicnumber.XZCompressArchive:
-		return handleUnar
-	case
-		magicnumber.PKWAREZip,
-		magicnumber.PKWAREZip64,
-		magicnumber.PKWAREZipImplode,
-		magicnumber.PKWAREZipReduce,
-		magicnumber.PKWAREZipShrink:
-		return handleZips
-	case magicnumber.ZStandardArchive:
-		return handleZStandard
-	default: // none is kept as an unused value
-		return handleNone
-	}
+	return signHandlers[sign]
 }
 
 // handleMacOS returns true for apple silicon devices that require
@@ -323,38 +311,12 @@ func ExtractAll(ctx context.Context, src, dst string) error {
 //
 // The returned string is the absolute path to the extracted
 // temporary directory.
-func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //nolint:funlen
+func ExtractTemp(ctx context.Context, src string) (path string, aErr error) {
 	const format = "archive extract temp: %s: %w"
 
-	const size150MB = 150 * 1024 * 1024
-
-	inf, aErr := os.Stat(src)
-	switch {
-	case aErr != nil:
-		return "", fmt.Errorf(format, "stat source", aErr)
-	case inf.IsDir():
-		return "", ErrNotArchive
-	case inf.Size() > size150MB:
-		return "", ErrTooMany
-	}
-
-	file, aErr := os.Open(src)
-	if aErr != nil {
-		return "", fmt.Errorf(format, "open", aErr)
-	}
-	defer func() {
-		cErr := file.Close()
-		if cErr != nil {
-			aErr = errors.Join(aErr, fmt.Errorf(format, "cannot close", cErr))
-		}
-	}()
-
-	sign, aErr := magicnumber.Archive(file)
-	if aErr != nil {
-		return "", fmt.Errorf(format, "magic", aErr)
-	}
-	if handles(sign, filepath.Base(src)) == handleNone {
-		return "", fmt.Errorf(format, "magic", ErrNotArchive)
+	err := validateTemp(src)
+	if err != nil {
+		return "", err
 	}
 
 	local := sanitize.Name(src)
@@ -373,26 +335,7 @@ func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //
 		}
 	}()
 
-	entries := 0
-	// counter is used instead of os.ReadDir to handle edge-case
-	// archives that contain a single directory in the root.
-	counter := func(_ string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if d != nil && d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !d.IsDir() {
-			entries++
-		}
-		return nil
-	}
-
-	_ = filepath.WalkDir(path, counter)
-
-	const extracted = 2
-	if entries >= extracted {
+	if extracted(path) {
 		return path, nil
 	}
 
@@ -402,6 +345,64 @@ func ExtractTemp(ctx context.Context, src string) (path string, aErr error) { //
 		return "", fmt.Errorf(format, "exec", xErr)
 	}
 	return path, nil
+}
+
+func validateTemp(src string) (err error) {
+	const format = "archive extract temp: %s: %w"
+	const size150MB = 150 * 1024 * 1024
+
+	inf, err := os.Stat(src)
+	switch {
+	case err != nil:
+		return fmt.Errorf(format, "stat source", err)
+	case inf.IsDir():
+		return ErrNotArchive
+	case inf.Size() > size150MB:
+		return ErrTooMany
+	}
+
+	file, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf(format, "open", err)
+	}
+	defer func() {
+		cErr := file.Close()
+		if cErr != nil {
+			err = errors.Join(err, fmt.Errorf(format, "cannot close", cErr))
+		}
+	}()
+
+	sign, err := magicnumber.Archive(file)
+	if err != nil {
+		return fmt.Errorf(format, "magic", err)
+	}
+	if handles(sign, filepath.Base(src)) == handleNone {
+		return fmt.Errorf(format, "magic", ErrNotArchive)
+	}
+	return nil
+}
+
+func extracted(dir string) bool {
+	const extracted = 2
+	entries := 0
+	// counter is used instead of os.ReadDir to handle edge-case
+	// archives that contain a single directory in the root.
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			entries++
+			if entries >= extracted {
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	return entries >= extracted
 }
 
 // mkContent returns the destination directory for the extracted archive content.
