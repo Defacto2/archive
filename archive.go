@@ -1,7 +1,7 @@
 // Package archive provides compressed and stored archive file extraction and content listing.
 //
 // The file archive formats supported are:
-// 7-Zip, ARC, ARJ, BZip2, Microsoft CAB, GZip, LHA, LZH, NoGate PAK, RAR,
+// 7-Zip, ARC, ARJ, BZip2, Microsoft CAB, GZip, LHA, LZH, NoGate PAK, PKLITE, RAR,
 // TAR, tarballs (compressed TAR), XZ, ZIP, and Zstandard.
 // ZIP support includes the deflate, implode, shrink, and store methods.
 //
@@ -101,6 +101,7 @@ const (
 	handleGzip
 	handleLbr
 	handleLha
+	handlePklite
 	handleRar
 	handleTar
 	handleTarballGz
@@ -121,6 +122,7 @@ var signHandlers = map[magicnumber.Signature]handler{
 	magicnumber.GzipCompressArchive:  handleGzip,
 	magicnumber.LibraryUtility:       handleLbr,
 	magicnumber.YoshiLHA:             handleLha,
+	magicnumber.PKLITE:               handlePklite,
 	magicnumber.RoshalARchive:        handleRar,
 	magicnumber.RoshalARchive93:      handleUnar,
 	magicnumber.RoshalARchivev5:      handleRar,
@@ -373,7 +375,7 @@ func validateTemp(src string) (err error) {
 		}
 	}()
 
-	sign, err := magicnumber.Archive(file)
+	sign, err := detect(file)
 	if err != nil {
 		return fmt.Errorf(format, "magic", err)
 	}

@@ -53,7 +53,7 @@ func (x Extractor) Extract(ctx context.Context, targets ...string) (err error) {
 		}
 	}()
 
-	sign, err := magicnumber.Archive(file)
+	sign, err := detect(file)
 	if err != nil {
 		return fmt.Errorf(format, "magic", err)
 	}
@@ -111,6 +111,7 @@ var extractors = map[handler]extractorFunc{
 	handleGzip:         Extractor.Gzip,
 	handleLbr:          Extractor.LBR,
 	handleLha:          Extractor.Unar,
+	handlePklite:       Extractor.Pklite,
 	handleRar:          Extractor.Rar,
 	handleTar:          Extractor.Tar,
 	handleTarballBz2:   Extractor.BSDTar,

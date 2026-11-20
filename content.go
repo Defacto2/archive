@@ -59,7 +59,7 @@ func (c *Content) Read(ctx context.Context, src string) error {
 		}
 	}()
 
-	sign, err := magicnumber.Archive(file)
+	sign, err := detect(file)
 	if err != nil {
 		return fmt.Errorf(format, "magic", err)
 	}
@@ -104,6 +104,7 @@ var contentReaders = map[handler]contentReader{ //nolint:gochecknoglobals
 	handleGzip:         (*Content).Gzip,
 	handleLbr:          (*Content).LBR,
 	handleLha:          (*Content).LHA,
+	handlePklite:       (*Content).Pklite,
 	handleRar:          (*Content).Rar,
 	handleTar:          (*Content).Tar,
 	handleTarballBz2:   (*Content).Bz2Tar,
