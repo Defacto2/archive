@@ -1,3 +1,4 @@
+//nolint:nonamedreturns
 package pklite_test
 
 import (
@@ -13,7 +14,7 @@ import (
 	"github.com/nalgeon/be"
 )
 
-// The test files are in the testdata directory of the archive package.
+// The test files are in the testdata directory of the pklite package.
 // D2.COM is the uncompressed original of the D2_V1B.COM and D2_V115.COM files,
 // and LOR.EXE is the original of LOR_V115.EXE.
 const (
@@ -29,7 +30,7 @@ const (
 
 func read(t *testing.T, name string) []byte {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "testdata", name))
+	b, err := os.ReadFile(filepath.Join("testdata", name))
 	be.Err(t, err, nil)
 	return b
 }
@@ -146,10 +147,10 @@ func TestCorrupt(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{beta, v115, exe115, exeV3, exeV3A, exeV1E} {
 		data := read(t, name)
-		for n := range len(data) {
+		for n := range data {
 			_, _ = pklite.Decompress(data[:n])
 		}
-		for i := range len(data) {
+		for i := range data {
 			bad := bytes.Clone(data)
 			bad[i] ^= 0xff
 			_, _ = pklite.Decompress(bad)
@@ -162,7 +163,7 @@ func TestCorrupt(t *testing.T) {
 
 func FuzzDecompress(f *testing.F) {
 	for _, n := range []string{beta, v115, exe115, exeV3, exeV3A, exeV1E} {
-		b, err := os.ReadFile(filepath.Join("..", "testdata", n))
+		b, err := os.ReadFile(filepath.Join("testdata", n))
 		if err == nil {
 			f.Add(b)
 		}

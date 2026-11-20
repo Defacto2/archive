@@ -1,3 +1,4 @@
+//nolint:gochecknoglobals
 package archive_test
 
 import (

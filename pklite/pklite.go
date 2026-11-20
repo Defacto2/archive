@@ -42,7 +42,7 @@
 //
 // [Deark]: https://github.com/jsummers/deark
 //
-//nolint:gochecknoglobals
+//nolint:gochecknoglobals,nonamedreturns
 package pklite
 
 import (
@@ -63,9 +63,39 @@ const (
 	MaxSize = 1 << 20
 
 	comBase    = 0x100 // MS-DOS loads a COM file at offset 0x100 of its segment.
+	minCOMSize = 128   // minimum valid size for a PKLITE compressed COM file.
 	scanLimit  = 64    // the copier stub is found within the first bytes.
-	longLenSym = 7     // the symbol for a long match length, for small COM files.
-	longBias   = 10
+	comSigScan = 0x80  // search range for "PKLITE" in COM header
+	betaScan   = 0x50  // search range for "PK Copyr" in beta COM header
+
+	// Beta COM stub layout.
+	betaIntroJump = 18 // offset of the short jump displacement in beta intro
+	betaCopierLen = 24 // size of beta copier stub before decompressor
+	betaDecompLen = 10 // length of beta decompressor signature
+
+	// Decompressor opcodes.
+	opNOP   = 0x90 // x86 NOP
+	opMovSI = 0xbe // x86 MOV SI, imm16
+
+	// Huffman tree limits.
+	maxCodeLen = 12 // maximum Huffman code bit length
+	wordBits   = 16 // 16-bit word size for bitReader
+	wordBytes  = 2  // 16-bit word size in bytes
+	keyBias    = 2  // offset from dec di; dec di before compressed data
+	initOutCap = 4096
+
+	// Match length symbols and biases.
+	smallLongSym  = 7  // long match symbol for small (COM) compression
+	smallLongBias = 10 // length bias for small compression
+	largeLongSym  = 22 // long match symbol for large (EXE) compression
+	largeLongBias = 25 // length bias for large compression
+	minMatchLen   = 3  // normal match length bias (sym + 3)
+	shortMatchLen = 2  // 2-byte short match length
+
+	// Special stream byte codes.
+	codeSpecial = 0xfd // uncompressed block marker or unsupported special code
+	codeSegSep  = 0xfe // segment separator in large compression
+	codeStop    = 0xff // stream termination marker
 )
 
 // Huffman codes for the small (COM) compression. The high 4 bits
@@ -90,7 +120,7 @@ var offsetCodes = [...]uint16{
 
 // IsCOM reports whether data looks like a PKLITE compressed COM file.
 func IsCOM(data []byte) bool {
-	_, _, err := findDataPos(data)
+	_, _, err := findPos(data)
 	return err == nil
 }
 
@@ -99,7 +129,7 @@ func Decompress(data []byte) ([]byte, error) {
 	if IsEXE(data) {
 		return decompressEXE(data)
 	}
-	pos, opt, err := findDataPos(data)
+	pos, opt, err := findPos(data)
 	if err != nil {
 		return nil, err
 	}
@@ -122,71 +152,109 @@ type options struct {
 	prehistory   bool
 }
 
-// findDataPos returns the file offset of the compressed data in a COM file.
+// findPos returns the file offset of the compressed data in a COM file.
 //
 // PKLITE COM files begin with a small intro, then a copier that moves
 // the decompressor to the top of memory, and then the decompressor that holds the
 // address of the compressed data. Some tools overwrite the intro, so the copier
 // is searched for rather than expected at a fixed offset.
-func findDataPos(data []byte) (int, options, error) {
+func findPos(data []byte) (int, options, error) {
 	var o options
-	if len(data) < 128 {
+	if len(data) < minCOMSize {
 		return 0, o, ErrNotPKLITE
 	}
-	if data[0] == 0xba && data[3] == 0xa1 && data[6] == 0x2d && data[7] == 0x20 {
-		return findBetaDataPos(data)
+
+	if betaCOM(data) {
+		return findBeta(data)
 	}
-	head := data[:min(len(data), scanLimit)]
-	if !bytes.Contains(data[:min(len(data), 0x80)], []byte("PKLITE")) &&
-		!bytes.Contains(data[:min(len(data), 0x80)], []byte("PKlite")) {
+	if !liteCOM(data) {
 		return 0, o, ErrNotPKLITE
 	}
-	// copier: and ax,0xfff0; mov di,ax; mov cx,N; [nop]; mov si,decompressor
-	pre := []byte{0x25, 0xf0, 0xff, 0x8b, 0xf8, 0xb9}
-	i := bytes.Index(head, pre)
-	if i < 0 {
+
+	decomp, ok := findLite(data)
+	if !ok {
 		return 0, o, ErrNotPKLITE
 	}
-	p := i + len(pre) + 2 // after the cx count
-	if p < len(head) && head[p] == 0x90 {
-		p++
-	}
-	if p+2 >= len(data) || data[p] != 0xbe {
-		return 0, o, ErrNotPKLITE
-	}
-	decomp := int(data[p+1]) | int(data[p+2])<<8 - comBase
+
 	// decompressor: std; mov di,ax; dec di; dec di; mov si,KEY
 	sig := []byte{0xfd, 0x8b, 0xf8, 0x4f, 0x4f, 0xbe}
-	if decomp < 0 || decomp+len(sig)+2 > len(data) || !bytes.Equal(data[decomp:decomp+len(sig)], sig) {
+	if decomp < 0 || decomp+len(sig)+wordBytes > len(data) ||
+		!bytes.Equal(data[decomp:decomp+len(sig)], sig) {
 		return 0, o, ErrNotPKLITE
 	}
-	k := decomp + len(sig)
-	pos := (int(data[k]) | int(data[k+1])<<8) + 2 - comBase
+
+	pos := int(le16(data, decomp+len(sig))) + keyBias - comBase
 	if pos < 1 || pos >= len(data) {
 		return 0, o, ErrNotPKLITE
 	}
 	return pos, o, nil
 }
 
-// findBetaDataPos is for the PKLITE v1.00 beta COM files that have a different stub:
+func betaCOM(data []byte) bool {
+	return data[0] == 0xba && data[3] == 0xa1 && data[6] == 0x2d && data[7] == 0x20
+}
+
+func liteCOM(data []byte) bool {
+	hdr := data[:min(len(data), comSigScan)]
+	return bytes.Contains(hdr, []byte("PKLITE")) ||
+		bytes.Contains(hdr, []byte("PKlite"))
+}
+
+func findLite(data []byte) (int, bool) {
+	head := data[:min(len(data), scanLimit)]
+
+	// copier: and ax,0xfff0; mov di,ax; mov cx,N; [nop]; mov si,decompressor
+	pre := []byte{0x25, 0xf0, 0xff, 0x8b, 0xf8, 0xb9}
+	i := bytes.Index(head, pre)
+	if i < 0 {
+		return 0, false
+	}
+
+	p := i + len(pre) + wordBytes // after the cx count
+	if p < len(head) && head[p] == opNOP {
+		p++
+	}
+	if p+wordBytes >= len(data) || data[p] != opMovSI {
+		return 0, false
+	}
+
+	return int(le16(data, p+1)) - comBase, true
+}
+
+// findBeta is for the PKLITE v1.00 beta COM files that have a different stub:
 // an intro that jumps to the copier, which is followed by the decompressor.
-func findBetaDataPos(data []byte) (int, options, error) {
-	o := options{prehistory: true}
+func findBeta(data []byte) (int, options, error) {
+	o := options{
+		large:      false,
+		extra:      false,
+		prehistory: true,
+	}
+
 	// the intro: mov dx,N; mov ax,[2]; sub ax,N; mov bx,cs; add bx,N; cmp ax,bx; ja
-	if find(data, 0, 18, "\xba??\xa1\x02\x00\x2d??\x8c\xcb??????\x77") != 0 || !bytes.Contains(data[:0x50], []byte("PK Copyr")) {
+	if find(data, 0,
+		betaIntroJump,
+		"\xba??\xa1\x02\x00\x2d??\x8c\xcb??????\x77") != 0 ||
+		!bytes.Contains(data[:betaScan], []byte("PK Copyr")) {
 		return 0, o, ErrNotPKLITE
 	}
-	pos := 18 + 1 + int(data[18]) // follow the one byte jump
+
+	pos := betaIntroJump + 1 + int(data[betaIntroJump]) // follow the one byte jump
 	// copier: cli; mov sp,0x200; mov ss,ax; sti
-	if pos+24+10 > len(data) || find(data, pos, pos+7, "\xfa\xbc\x00\x02\x8e\xd0\xfb") != pos {
+	const copierSig = "\xfa\xbc\x00\x02\x8e\xd0\xfb"
+	if pos+betaCopierLen+betaDecompLen > len(data) ||
+		find(data, pos, pos+len(copierSig), copierSig) != pos {
 		return 0, o, ErrNotPKLITE
 	}
-	decomp := pos + 24
+
+	decomp := pos + betaCopierLen
 	// decompressor: std; mov si,KEY; add si,dx; mov di,dx; dec di; dec di
-	if find(data, decomp, decomp+10, "\xfd\xbe??\x03\xf2\x8b\xfa\x4f\x4f") != decomp {
+	if find(data, decomp,
+		decomp+betaDecompLen,
+		"\xfd\xbe??\x03\xf2\x8b\xfa\x4f\x4f") != decomp {
 		return 0, o, ErrNotPKLITE
 	}
-	start := int(data[decomp+2]) | int(data[decomp+3])<<8 + 2 - comBase
+
+	start := int(le16(data, decomp+wordBytes)) + keyBias - comBase
 	if start < 1 || start >= len(data) {
 		return 0, o, ErrNotPKLITE
 	}
@@ -207,28 +275,28 @@ type bitReader struct {
 	data []byte
 	pos  int
 	bits uint16
-	n    uint
+	n    byte
 	eof  bool
 }
 
 func (b *bitReader) fill() bool {
-	if b.pos+2 > len(b.data) {
+	if b.pos+wordBytes > len(b.data) {
 		return false
 	}
-	b.bits = uint16(b.data[b.pos]) | uint16(b.data[b.pos+1])<<8
-	b.pos += 2
-	b.n = 16
+	b.bits = le16(b.data, b.pos)
+	b.pos += wordBytes
+	b.n = wordBits
 	return true
 }
 
 // bit consumes the next bit, refilling eagerly like the original decompressor.
 // Running out of data is only an error when a bit is actually needed.
-func (b *bitReader) bit() int {
+func (b *bitReader) bit() uint16 {
 	if b.n == 0 && !b.fill() {
 		b.eof = true
 		return 0
 	}
-	v := int(b.bits & 1)
+	v := b.bits & 1
 	b.bits >>= 1
 	b.n--
 	if b.n == 0 {
@@ -248,110 +316,180 @@ func (b *bitReader) byte() (byte, bool) {
 
 func (b *bitReader) symbol(h huffman) (int, error) {
 	var code, length uint16
-	for length < 12 {
-		code = code<<1 | uint16(b.bit()) //nolint:gosec
+	for length < maxCodeLen {
+		code = code<<1 | b.bit()
 		length++
 		if b.eof {
 			return 0, ErrTruncated
 		}
-		if sym, ok := h[length<<12|code]; ok {
+		if sym, ok := h[length<<maxCodeLen|code]; ok {
 			return int(sym), nil
 		}
 	}
 	return 0, ErrCorrupt
 }
 
+type decoder struct {
+	br      *bitReader
+	opt     options
+	lengths huffman
+	offsets huffman
+	longSym int
+	bias    int
+	ml2Sym  int
+	out     []byte
+}
+
+func newDecoder(data []byte, start int, opt options) (*decoder, error) {
+	br := &bitReader{data: data, pos: start} //nolint:exhaustruct_v5
+	if !br.fill() {
+		return nil, ErrTruncated
+	}
+
+	codes, longSym, bias := smallLengthCodes[:], smallLongSym, smallLongBias
+	if opt.large {
+		codes, longSym, bias = largeLengthCodes[:], largeLongSym, largeLongBias
+	}
+
+	return &decoder{
+		br:      br,
+		opt:     opt,
+		lengths: newHuffman(codes),
+		offsets: newHuffman(offsetCodes[:]),
+		longSym: longSym,
+		bias:    bias,
+		ml2Sym:  longSym + 1, // a two byte match, with the offset high bits of zero
+		out:     make([]byte, 0, initOutCap),
+	}, nil
+}
+
 // decode decompresses the PKLITE data beginning at start.
 // It returns the decompressed bytes and the offset following the compressed data.
 // The options select the codes used by the large (EXE) compression,
 // the obfuscation of the literal bytes, and the v1.00 beta implied zero byte before the data.
-func decode(data []byte, start int, o options) ([]byte, int, error) {
-	large, extra := o.large, o.extra
-	br := &bitReader{data: data, pos: start}
-	if !br.fill() {
-		return nil, 0, ErrTruncated
+func decode(data []byte, start int, opt options) ([]byte, int, error) {
+	d, err := newDecoder(data, start, opt)
+	if err != nil {
+		return nil, 0, err
 	}
-	codes, longSym, bias := smallLengthCodes[:], 7, 10
-	if large {
-		codes, longSym, bias = largeLengthCodes[:], 22, 25
-	}
-	ml2Sym := longSym + 1 // a two byte match, with the offset high bits of zero
-	lengths := newHuffman(codes)
-	offsets := newHuffman(offsetCodes[:])
-	out := make([]byte, 0, 4096)
 
 	for {
-		flag := br.bit()
-		if br.eof {
+		flag := d.br.bit()
+		if d.br.eof {
 			return nil, 0, ErrTruncated
 		}
 		if flag == 0 {
-			c, ok := br.byte()
-			if !ok {
-				return nil, 0, ErrTruncated
-			}
-			if extra {
-				c ^= byte(br.n) //nolint:gosec
-			}
-			out = append(out, c)
-			if len(out) > MaxSize {
-				return nil, 0, ErrCorrupt
+			err := d.literal()
+			if err != nil {
+				return nil, 0, err
 			}
 			continue
 		}
-		sym, err := br.symbol(lengths)
+		done, err := d.match()
 		if err != nil {
 			return nil, 0, err
 		}
-		var length, hi int
-		haveHi := false
-		switch {
-		case sym < longSym:
-			length = sym + 3
-		case sym == longSym:
-			b, ok := br.byte()
-			if !ok {
-				return nil, 0, ErrTruncated
-			}
-			switch {
-			case b == 0xff: // the stop code
-				return out, br.pos, nil
-			case b == 0xfe && large: // a segment separator
-				continue
-			case b >= 0xfd:
-				return nil, 0, fmt.Errorf("%w: unsupported code 0x%02x", ErrCorrupt, b)
-			}
-			length = int(b) + bias
-		case sym == ml2Sym:
-			length = 2
-			haveHi = true
-		default:
-			return nil, 0, ErrCorrupt
-		}
-		if !haveHi {
-			if hi, err = br.symbol(offsets); err != nil {
-				return nil, 0, err
-			}
-		}
-		lo, ok := br.byte()
-		if !ok {
-			return nil, 0, ErrTruncated
-		}
-		dist := hi<<8 | int(lo)
-		if len(out)+length > MaxSize {
-			return nil, 0, ErrCorrupt
-		}
-		if o.prehistory && dist == len(out)+1 {
-			// the v1.00 beta may copy from an implied zero byte before the data.
-			out = append(out, 0)
-			length--
-			dist = len(out)
-		}
-		if dist == 0 || dist > len(out) {
-			return nil, 0, fmt.Errorf("%w: distance %d with %d bytes written", ErrCorrupt, dist, len(out))
-		}
-		for range length {
-			out = append(out, out[len(out)-dist])
+		if done {
+			return d.out, d.br.pos, nil
 		}
 	}
+}
+
+func (d *decoder) literal() error {
+	c, ok := d.br.byte()
+	if !ok {
+		return ErrTruncated
+	}
+	if d.opt.extra {
+		c ^= d.br.n
+	}
+	d.out = append(d.out, c)
+	if len(d.out) > MaxSize {
+		return ErrCorrupt
+	}
+	return nil
+}
+
+func (d *decoder) match() (bool, error) {
+	length, highBits, done, err := d.matchLength()
+	if err != nil || done {
+		return done, err
+	}
+	if length == 0 {
+		return false, nil
+	}
+	dist, err := d.matchDist(highBits)
+	if err != nil {
+		return false, err
+	}
+	return false, d.cpHistory(dist, length)
+}
+
+func (d *decoder) matchLength() (length int, highBits bool, done bool, err error) {
+	sym, err := d.br.symbol(d.lengths)
+	if err != nil {
+		return 0, false, false, err
+	}
+
+	switch {
+	case sym < d.longSym:
+		return sym + minMatchLen, false, false, nil
+	case sym == d.longSym:
+		b, ok := d.br.byte()
+		if !ok {
+			return 0, false, false, ErrTruncated
+		}
+		switch {
+		case b == codeStop:
+			return 0, false, true, nil
+		case b == codeSegSep && d.opt.large:
+			return 0, false, false, nil
+		case b >= codeSpecial:
+			return 0, false, false, fmt.Errorf("%w: unsupported code 0x%02x", ErrCorrupt, b)
+		default:
+			return int(b) + d.bias, false, false, nil
+		}
+	case sym == d.ml2Sym:
+		return shortMatchLen, true, false, nil
+	default:
+		return 0, false, false, ErrCorrupt
+	}
+}
+
+func (d *decoder) matchDist(highBits bool) (int, error) {
+	var hi int
+	if !highBits {
+		var err error
+		hi, err = d.br.symbol(d.offsets)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	lo, ok := d.br.byte()
+	if !ok {
+		return 0, ErrTruncated
+	}
+	return hi<<8 | int(lo), nil
+}
+
+func (d *decoder) cpHistory(dist, length int) error {
+	if len(d.out)+length > MaxSize {
+		return ErrCorrupt
+	}
+
+	if d.opt.prehistory && dist == len(d.out)+1 {
+		// the v1.00 beta may copy from an implied zero byte before the data.
+		d.out = append(d.out, 0)
+		length--
+		dist = len(d.out)
+	}
+	if dist == 0 || dist > len(d.out) {
+		return fmt.Errorf("%w: distance %d with %d bytes written", ErrCorrupt, dist, len(d.out))
+	}
+
+	for range length {
+		d.out = append(d.out, d.out[len(d.out)-dist])
+	}
+	return nil
 }

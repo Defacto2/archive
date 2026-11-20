@@ -19,20 +19,24 @@ import (
 // that has the same name as the source.
 
 const (
-	comx = ".com" // MS-DOS command executable
-	exex = ".exe" // MS-DOS executable
+	ccom = ".com" // MS-DOS command executable
+	eexe = ".exe" // MS-DOS executable
 )
 
 // maxPklite is the number of bytes read from a file to detect a PKLITE compressed COM.
 const maxPklite = 1 << 16
 
 // detect returns the archive signature of the file.
-// It extends [magicnumber.Archive] with the detection of PKLITE compressed COM and EXE files,
-// which do not use the PKLITE signature that is found in the EXE header.
+// It extends [magicnumber.Archive] with the detection
+// of PKLITE compressed COM and EXE files, which do not
+// use the PKLITE signature that is found in the EXE header.
 func detect(file io.ReaderAt) (magicnumber.Signature, error) {
 	sign, err := magicnumber.Archive(file)
-	if err != nil || sign != magicnumber.Unknown {
-		return sign, err //nolint:wrapcheck
+	if err != nil {
+		return sign, fmt.Errorf("pklite detect: %w", err)
+	}
+	if sign != magicnumber.Unknown {
+		return sign, nil
 	}
 	data, err := io.ReadAll(io.NewSectionReader(file, 0, maxPklite))
 	if err != nil {
@@ -63,12 +67,12 @@ func unpack(src string) ([]byte, error) {
 func (c *Content) Pklite(_ context.Context, src string) error {
 	out, err := unpack(src)
 	if err != nil {
-		return fmt.Errorf("content pklite: %w", err)
+		return fmt.Errorf("pklite content: %w", err)
 	}
 	c.Files = []string{filepath.Base(src)}
-	c.Ext = comx
+	c.Ext = ccom
 	if bytes.HasPrefix(out, []byte("MZ")) {
-		c.Ext = exex
+		c.Ext = eexe
 	}
 	return nil
 }
@@ -77,21 +81,22 @@ func (c *Content) Pklite(_ context.Context, src string) error {
 // The decompressed file is given the same name as the source.
 // If the targets are not empty, then the file is only extracted when named in the targets.
 func (x Extractor) Pklite(_ context.Context, targets ...string) error {
+	const format = "pklite extract %s: %w"
 	name := filepath.Base(x.Source)
 	if len(targets) > 0 && !slices.Contains(targets, name) {
 		return nil
 	}
 	out, err := unpack(x.Source)
 	if err != nil {
-		return fmt.Errorf("extract pklite: %w", err)
+		return fmt.Errorf(format, "x source", err)
 	}
 	err = os.MkdirAll(x.Destination, DirWriteReadRead)
 	if err != nil {
-		return fmt.Errorf("extract pklite mkdir all: %w", err)
+		return fmt.Errorf(format, "mkdir all", err)
 	}
 	err = os.WriteFile(filepath.Join(x.Destination, name), out, WriteWriteRead)
 	if err != nil {
-		return fmt.Errorf("extract pklite write file: %w", err)
+		return fmt.Errorf(format, "write file", err)
 	}
 	return nil
 }

@@ -34,7 +34,7 @@ It supports `.COM` files (v1.00 beta to v2.01) and unscrambled `.EXE` files (v1.
 
 ### Test data
 
-The tests use the files in the `testdata` directory of the parent `archive` package.
+The tests use the files in the `testdata` directory of the `pklite` package.
 They are not copyrighted third-party programs.
 
 | File           | Description                                                                                                                                                        |

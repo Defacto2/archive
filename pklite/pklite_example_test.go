@@ -10,7 +10,7 @@ import (
 
 // Example demonstrates unpacking a PKLITE compressed COM file.
 func Example() {
-	data, err := os.ReadFile(filepath.Join("..", "testdata", "D2_V115.COM"))
+	data, err := os.ReadFile(filepath.Join("testdata", "D2_V115.COM"))
 	if err != nil {
 		fmt.Println(err)
 		return

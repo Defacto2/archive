@@ -6,8 +6,10 @@ package pklite
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 )
 
 var ErrUnsupported = errors.New("pklite: unsupported variant")
@@ -15,8 +17,53 @@ var ErrUnsupported = errors.New("pklite: unsupported variant")
 const (
 	paragraph  = 16
 	pageSize   = 512
-	exeHdrMin  = 28
-	epBytesLen = 1000 // the most bytes read from the entry point
+	headerSize = 28    // "MZ" signature header minimum length
+	mzSize     = 2     // "MZ" signature bytes omitted from stored headers
+	entrypoint = 1000  // the most bytes read from the entry point
+	pspSize    = 0x100 // DOS Program Segment Prefix (256 bytes)
+	footerSize = 8     // saved registers (SS, SP, CS, IP)
+	uint16Mask = 0xffff
+
+	// PKLITE header signature.
+	sigOffset = 0x1e // offset of "PKLITE" in MZ header
+	sigSize   = 6
+
+	// Decompressor stub detection.
+	cpSearch   = 120  // max bytes from entry point to search for copier
+	cpDecomp   = 7    // offset of decompressor IP in copier pattern
+	decompSize = 6    // length of std/mov/push/add-bx prefix
+	largeSig   = 60   // tail bytes before end of stub to search for table
+	modeSmall  = 0x09 // small-compression marker byte
+	modeLarge  = 0x18 // large-compression marker byte
+	opPushAX   = 0x50 // 8086 "push ax" opcode
+	opMovAX    = 0xb8 // 8086 "mov ax, imm16" opcode
+
+	// Saved register offsets in footer.
+	footSS = 0
+	footSP = 2
+	footCS = 4
+	footIP = 6
+
+	// Long relocation table markers.
+	relocEntrySize = 4
+	relocStop      = 0xffff
+	relocStep      = 0x0fff
+)
+
+// MZ header field byte offsets.
+const (
+	hdrLastPage = 2
+	hdrPages    = 4
+	hdrRelocs   = 6
+	hdrParas    = 8
+	hdrMinAlloc = 10
+	hdrMaxAlloc = 12
+	hdrSS       = 14
+	hdrSP       = 16
+	hdrCsum     = 18
+	hdrIP       = 20
+	hdrCS       = 22
+	hdrRelocPos = 24
 )
 
 // exeHeader is the MZ header of a DOS executable.
@@ -33,31 +80,49 @@ type exeHeader struct {
 
 func le16(b []byte, i int) uint16 { return uint16(b[i]) | uint16(b[i+1])<<8 }
 
-func put16(b []byte, v int) []byte { return append(b, byte(v), byte(v>>8)) }
+func put16(b []byte, v int) []byte {
+	return binary.LittleEndian.AppendUint16(b, uint16(v&uint16Mask))
+}
 
 // parseEXE reads the MZ header from the data.
 func parseEXE(data []byte) (exeHeader, bool) {
 	var h exeHeader
-	if len(data) < exeHdrMin || data[0] != 'M' && data[0] != 'Z' || data[1] != 'Z' && data[1] != 'M' {
+	if len(data) < headerSize ||
+		data[0] != 'M' && data[0] != 'Z' ||
+		data[1] != 'Z' && data[1] != 'M' {
 		return h, false
 	}
-	h.lastPage, h.pages, h.relocs = le16(data, 2), le16(data, 4), le16(data, 6)
-	h.hdrParas, h.minAlloc, h.maxAlloc = le16(data, 8), le16(data, 10), le16(data, 12)
-	h.ss, h.sp, h.csum = le16(data, 14), le16(data, 16), le16(data, 18)
-	h.ip, h.cs, h.relocPos = le16(data, 20), le16(data, 22), le16(data, 24)
+
+	h.lastPage, h.pages, h.relocs =
+		le16(data, hdrLastPage), le16(data, hdrPages), le16(data, hdrRelocs)
+	h.hdrParas, h.minAlloc, h.maxAlloc =
+		le16(data, hdrParas), le16(data, hdrMinAlloc), le16(data, hdrMaxAlloc)
+	h.ss, h.sp, h.csum =
+		le16(data, hdrSS), le16(data, hdrSP), le16(data, hdrCsum)
+	h.ip, h.cs, h.relocPos =
+		le16(data, hdrIP), le16(data, hdrCS), le16(data, hdrRelocPos)
 	h.startOfCode = int(h.hdrParas) * paragraph
 	h.endOfCode = int(h.pages) * pageSize
 	if h.lastPage > 0 && h.pages > 0 {
 		h.endOfCode = (int(h.pages)-1)*pageSize + int(h.lastPage)
 	}
-	h.entryPoint = h.startOfCode + int(int16(h.cs))*paragraph + int(h.ip) //nolint:gosec
+
+	cs := int(h.cs)
+	if cs > math.MaxInt16 {
+		cs -= math.MaxUint16 + 1
+	}
+	h.entryPoint = h.startOfCode +
+		cs*paragraph +
+		int(h.ip)
+
 	return h, true
 }
 
 // IsEXE reports whether data looks like a PKLITE compressed EXE file.
 func IsEXE(data []byte) bool {
 	_, ok := parseEXE(data)
-	return ok && len(data) >= 0x24 && bytes.Equal(data[0x1e:0x24], []byte("PKLITE"))
+	return ok && len(data) >= sigOffset+sigSize &&
+		bytes.Equal(data[sigOffset:sigOffset+sigSize], []byte("PKLITE"))
 }
 
 // find returns the index of the pattern in mem[from:to] or -1.
@@ -93,101 +158,144 @@ type exeParams struct {
 // stored as machine code operands, so known byte patterns are searched for.
 // Unscrambled v1.00 to v1.15 decompressors are supported.
 func analyze(data []byte, h exeHeader) (exeParams, error) {
+	const format = "analyze compressed data %s: %w"
 	var p exeParams
 	if h.entryPoint < 0 || h.entryPoint >= len(data) {
 		return p, ErrNotPKLITE
 	}
-	ep := data[h.entryPoint:min(len(data), h.entryPoint+epBytesLen)]
-	// ipToEP converts an offset in the decompressor segment into an entry point offset.
-	ipToEP := func(ip int) int { return max(h.startOfCode+ip-0x100-h.entryPoint, 0) }
 
-	// copier: mov cx,N; xor di,di; push di; mov si,DECOMPRESSOR; cld; rep movsw; retf
-	c := find(ep, 0, 120, "\xb9??\x33\xff\x57\xbe??\xfc\xf3\xa5\xcb")
-	if c < 0 {
-		return p, fmt.Errorf("%w: copier not found", ErrUnsupported)
+	ep := data[h.entryPoint:min(len(data), h.entryPoint+entrypoint)]
+	// ipToEP converts an offset in the decompressor segment into an entry point offset.
+	ipToEP := func(ip int) int { return max(h.startOfCode+ip-pspSize-h.entryPoint, 0) }
+
+	decomp, dataIP, err := findDecompressor(ep, ipToEP)
+	if err != nil {
+		return p, err
 	}
-	decomp := ipToEP(int(le16(ep, c+7)))
-	if decomp+8 > len(ep) {
-		return p, fmt.Errorf("%w: decompressor not found", ErrUnsupported)
-	}
-	var n int
-	switch {
-	case find(ep, decomp, decomp+6, "\xfd\x8c\xdb\x53\x83\xc3") == decomp:
-		n = int(ep[decomp+6]) * paragraph
-	case find(ep, decomp, decomp+6, "\xfd\x8c\xdb\x53\x81\xc3") == decomp:
-		n = int(le16(ep, decomp+6)) * paragraph
-	default:
-		return p, fmt.Errorf("%w: decompressor not recognized", ErrUnsupported)
-	}
-	p.dataPos = h.entryPoint + ipToEP(n)
+
+	p.dataPos = h.entryPoint + ipToEP(dataIP)
 	end := p.dataPos - h.entryPoint // the approximate end of the decompressor
 	if p.dataPos <= 0 || p.dataPos >= len(data) || end > len(ep) {
-		return p, fmt.Errorf("%w: compressed data position", ErrUnsupported)
+		return p, fmt.Errorf(format, "position", ErrUnsupported)
 	}
 
-	// the extra compression obfuscates the literal bytes with the bit count.
-	switch i := find(ep, decomp, end, "\xad\x95\xb2\x10\x72?\xac??\xaa\xd1\xed\x4a\x74"); {
-	case find(ep, decomp, end, "\xad\x95\xb2\x10\x72\x08\xa4\xd1\xed\x4a\x74") >= 0:
-		p.extra = false
-	case i >= 0 && ep[i+5] == 0x0b && ep[i+7] == 0x32 && ep[i+8] == 0xc2:
-		p.extra = true
-	default:
-		return p, fmt.Errorf("%w: compression variant", ErrUnsupported)
+	p.extra, err = detectExtra(ep, decomp, end)
+	if err != nil {
+		return p, err
 	}
-	const sig = "\x01\x02\x00\x00\x03\x04\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x07\x08\x09\x0a\x0b"
-	i := find(ep, end-60, end, sig)
-	if i <= 0 {
-		return p, fmt.Errorf("%w: v1.20 compression", ErrUnsupported)
-	}
-	switch ep[i-1] {
-	case 0x09:
-		p.large = false
-	case 0x18:
-		p.large = true
-	default:
-		return p, fmt.Errorf("%w: compression type", ErrUnsupported)
+
+	p.large, err = detectLarge(ep, end)
+	if err != nil {
+		return p, err
 	}
 	return p, nil
 }
 
+func findDecompressor(ep []byte, ipToEP func(int) int) (int, int, error) {
+	const format = "find decompressor %s: %w"
+	// copier: mov cx,N; xor di,di; push di; mov si,DECOMPRESSOR; cld; rep movsw; retf
+	c := find(ep, 0, cpSearch, "\xb9??\x33\xff\x57\xbe??\xfc\xf3\xa5\xcb")
+	if c < 0 {
+		return 0, 0, fmt.Errorf(format, "copier not found", ErrUnsupported)
+	}
+
+	decomp := ipToEP(int(le16(ep, c+cpDecomp)))
+	if decomp+8 > len(ep) {
+		return 0, 0, fmt.Errorf(format, "decompressor not found", ErrUnsupported)
+	}
+
+	switch {
+	case find(ep, decomp, decomp+decompSize, "\xfd\x8c\xdb\x53\x83\xc3") == decomp:
+		return decomp, int(ep[decomp+decompSize]) * paragraph, nil
+	case find(ep, decomp, decomp+decompSize, "\xfd\x8c\xdb\x53\x81\xc3") == decomp:
+		return decomp, int(le16(ep, decomp+decompSize)) * paragraph, nil
+	default:
+		return 0, 0, fmt.Errorf(format, "decompressor not recognized", ErrUnsupported)
+	}
+}
+
+func detectExtra(ep []byte, decomp, end int) (bool, error) {
+	const format = "detect extract %s: %w"
+	// the extra compression obfuscates the literal bytes with the bit count.
+	if find(ep, decomp, end, "\xad\x95\xb2\x10\x72\x08\xa4\xd1\xed\x4a\x74") >= 0 {
+		return false, nil
+	}
+
+	i := find(ep, decomp, end, "\xad\x95\xb2\x10\x72?\xac??\xaa\xd1\xed\x4a\x74")
+	if i >= 0 && ep[i+5] == 0x0b && ep[i+7] == 0x32 && ep[i+8] == 0xc2 {
+		return true, nil
+	}
+	return false, fmt.Errorf(format, "compression variant", ErrUnsupported)
+}
+
+func detectLarge(ep []byte, end int) (bool, error) {
+	const format = "detect large %s: %w"
+	const sig = "\x01\x02\x00\x00\x03\x04\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x07\x08\x09\x0a\x0b"
+	i := find(ep, end-largeSig, end, sig)
+	if i <= 0 {
+		return false, fmt.Errorf(format, "v1.20 compression", ErrUnsupported)
+	}
+
+	switch ep[i-1] {
+	case modeSmall:
+		return false, nil
+	case modeLarge:
+		return true, nil
+	default:
+		return false, fmt.Errorf(format, "compression type", ErrUnsupported)
+	}
+}
+
 // decompressEXE returns the original EXE from the PKLITE compressed EXE.
 func decompressEXE(data []byte) ([]byte, error) {
+	const format = "decompress exe %s: %w"
 	h, ok := parseEXE(data)
 	if !ok || !IsEXE(data) {
 		return nil, ErrNotPKLITE
 	}
+
 	if h.endOfCode > len(data) || h.endOfCode < h.startOfCode {
-		return nil, fmt.Errorf("%w: bad file size", ErrCorrupt)
+		return nil, fmt.Errorf(format, "bad file size", ErrCorrupt)
 	}
+
 	p, err := analyze(data, h)
 	if err != nil {
 		return nil, err
 	}
-	code, pos, err := decode(data[:h.endOfCode], p.dataPos, options{large: p.large, extra: p.extra})
+
+	code, pos, err := decode(data[:h.endOfCode], p.dataPos,
+		options{large: p.large, extra: p.extra, prehistory: false})
 	if err != nil {
 		return nil, err
 	}
 
 	// the compressed relocation table, then the footer of the registers
-	relocs, pos, err := readRelocs(data[:max(h.endOfCode-8, 0)], pos, p.extra)
+	relocs, pos, err := readRelocs(data[:max(h.endOfCode-footerSize, 0)], pos, p.extra)
 	if err != nil {
 		return nil, err
 	}
-	if h.endOfCode-pos < 8 {
-		return nil, fmt.Errorf("%w: missing footer", ErrCorrupt)
+
+	if h.endOfCode-pos < footerSize {
+		return nil, fmt.Errorf(format, "missing footer", ErrCorrupt)
 	}
+
 	foot := data[pos:]
-	reg := regs{ss: le16(foot, 0), sp: le16(foot, 2), cs: le16(foot, 4), ip: le16(foot, 6)}
+	reg := regs{
+		ss: le16(foot, footSS),
+		sp: le16(foot, footSP),
+		cs: le16(foot, footCS),
+		ip: le16(foot, footIP),
+	}
 
 	var hdr []byte
 	if !p.extra { // the extra compression does not store the original header
-		hdr = originalHeader(data, h, reg, len(relocs)/4)
+		hdr = originalHeader(data, h, reg, len(relocs)/relocEntrySize)
 	}
 	if hdr == nil {
-		hdr = reconstructHeader(data, h, reg, len(relocs)/4, code)
+		hdr = reconstructHeader(data, h, reg, len(relocs)/relocEntrySize, code)
 	}
 	g, _ := parseEXE(hdr)
-	relocPos := max(int(g.relocPos), exeHdrMin)
+	relocPos := max(int(g.relocPos), headerSize)
 
 	out := make([]byte, 0, g.startOfCode+len(code))
 	out = append(out, hdr[:min(len(hdr), relocPos)]...)
@@ -198,6 +306,7 @@ func decompressEXE(data []byte) ([]byte, error) {
 	if over := len(data) - h.endOfCode; over > 0 && len(out) == g.endOfCode {
 		out = append(out, data[h.endOfCode:]...)
 	}
+
 	return out, nil
 }
 
@@ -207,14 +316,16 @@ type regs struct{ ss, sp, cs, ip uint16 }
 // it as a MZ relocation table, with the position following the table.
 // The 'long' table is used by the extra compression.
 func readRelocs(data []byte, pos int, long bool) ([]byte, int, error) {
+	const format = "compressed relocation table: %w"
 	const maxRelocs = 65535
 	if long {
 		return readLongRelocs(data, pos)
 	}
+
 	var table []byte
 	for {
 		if pos >= len(data) {
-			return nil, 0, fmt.Errorf("%w: relocation table", ErrTruncated)
+			return nil, 0, fmt.Errorf(format, ErrTruncated)
 		}
 		count := int(data[pos])
 		pos++
@@ -222,12 +333,12 @@ func readRelocs(data []byte, pos int, long bool) ([]byte, int, error) {
 			return table, pos, nil
 		}
 		if len(table)/4+count > maxRelocs || pos+2+count*2 > len(data) {
-			return nil, 0, fmt.Errorf("%w: relocation table", ErrCorrupt)
+			return nil, 0, fmt.Errorf(format, ErrCorrupt)
 		}
 		seg := le16(data, pos)
 		pos += 2
 		for range count {
-			table = append(table, data[pos], data[pos+1], byte(seg), byte(seg>>8))
+			table = binary.LittleEndian.AppendUint16(append(table, data[pos], data[pos+1]), seg)
 			pos += 2
 		}
 	}
@@ -236,21 +347,25 @@ func readRelocs(data []byte, pos int, long bool) ([]byte, int, error) {
 // originalHeader returns a copy of the original EXE header, which is stored in the
 // compressed file after the relocation table. Nil is returned if it is missing or bad.
 func originalHeader(data []byte, h exeHeader, reg regs, relocs int) []byte {
-	pos := int(h.relocPos) + 4*int(h.relocs)
+	pos := int(h.relocPos) + relocEntrySize*int(h.relocs)
 	n := h.startOfCode - pos
-	if n < 26 || pos+n > len(data) {
+	if n < headerSize-mzSize || pos+n > len(data) {
 		return nil
 	}
-	if rp := int(le16(data, pos+22)); rp >= exeHdrMin && rp < 2+n {
-		n = rp - 2
+
+	if rp := int(le16(data, pos+hdrRelocPos-mzSize)); rp >= headerSize && rp < mzSize+n {
+		n = rp - mzSize
 	}
-	if le16(data, pos) > 511 || le16(data, pos+2) == 0 {
+
+	if le16(data, pos) >= pageSize || le16(data, pos+hdrPages-mzSize) == 0 {
 		return nil
 	}
+
 	hdr := append([]byte{'M', 'Z'}, data[pos:pos+n]...)
-	if len(hdr) < exeHdrMin {
+	if len(hdr) < headerSize {
 		return nil
 	}
+
 	g, _ := parseEXE(hdr)
 	if g.ss != reg.ss || g.sp != reg.sp || g.cs != reg.cs || g.ip != reg.ip || int(g.relocs) != relocs {
 		return nil
@@ -265,26 +380,27 @@ func reconstructHeader(data []byte, h exeHeader, reg regs, relocs int, code []by
 	if maxMem == 0 {
 		maxMem = 0xffff
 	}
+
 	// The decompressor loads the size of the program in paragraphs at the entry point.
 	if ep := h.entryPoint; ep >= 0 && ep+3 <= len(data) {
 		i := ep
-		if data[i] == 0x50 {
+		if data[i] == opPushAX {
 			i++
 		}
-		if data[i] == 0xb8 && i+3 <= len(data) {
-			if n := int(le16(data, i+1))<<4 + 0x100 - len(code); n >= 0 {
-				minMem = (n + 0xf) >> 4
+		if data[i] == opMovAX && i+3 <= len(data) {
+			if n := int(le16(data, i+1))*paragraph + pspSize - len(code); n >= 0 {
+				minMem = (n + paragraph - 1) / paragraph
 			}
 		}
 	}
 	maxMem = max(maxMem, minMem)
 
-	start := (exeHdrMin + relocs*4 + paragraph - 1) / paragraph * paragraph
+	start := (headerSize + relocs*4 + paragraph - 1) / paragraph * paragraph
 	end := start + len(code)
 	hdr := []byte{'M', 'Z'}
 	for _, v := range []int{
 		end % pageSize, (end + pageSize - 1) / pageSize, relocs, start / paragraph,
-		minMem, maxMem, int(reg.ss), int(reg.sp), 0, int(reg.ip), int(reg.cs), exeHdrMin, 0,
+		minMem, maxMem, int(reg.ss), int(reg.sp), 0, int(reg.ip), int(reg.cs), headerSize, 0,
 	} {
 		hdr = put16(hdr, v)
 	}
@@ -292,25 +408,30 @@ func reconstructHeader(data []byte, h exeHeader, reg regs, relocs int, code []by
 }
 
 func readLongRelocs(data []byte, pos int) ([]byte, int, error) {
+	const format = "long relocation table: %w"
 	const maxRelocs = 65535
 	var table []byte
 	seg := 0
 	for {
 		if pos+2 > len(data) {
-			return nil, 0, fmt.Errorf("%w: relocation table", ErrTruncated)
+			return nil, 0, fmt.Errorf(format, ErrTruncated)
 		}
+
 		count := int(le16(data, pos))
 		pos += 2
-		if count == 0xffff {
+		if count == relocStop {
 			return table, pos, nil
 		}
+
 		if seg > 0xffff || len(table)/4+count > maxRelocs || pos+count*2 > len(data) {
-			return nil, 0, fmt.Errorf("%w: relocation table", ErrCorrupt)
+			return nil, 0, fmt.Errorf(format, ErrCorrupt)
 		}
+
 		for range count {
-			table = append(table, data[pos], data[pos+1], byte(seg), byte(seg>>8))
+			table = binary.LittleEndian.AppendUint16(append(table, data[pos], data[pos+1]), uint16(seg&uint16Mask))
 			pos += 2
 		}
-		seg += 0x0fff
+
+		seg += relocStep
 	}
 }
